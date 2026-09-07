@@ -86,8 +86,7 @@ build), which is why updates are deliberate.
 
 ## What the app fixes, and why
 
-Each of these was diagnosed from a real failure; the deep dives are in the
-[legacy playbook](docs/bottles-playbook.md).
+Each of these was diagnosed from a real failure.
 
 | Symptom under Wine | Cause | What the app does |
 |---|---|---|
@@ -121,8 +120,6 @@ nilinux/
   doctor.py, cli.py, gui.py (GTK4 + libadwaita), msi.py, download.py, progress.py
 flatpak/             manifest (GNOME 50 runtime; bundles 7-Zip, cabextract, olefile), build.sh
 data/                desktop entry, AppStream metainfo, icon
-docs/                legacy Bottles playbook (the research behind the fixes)
-legacy/              the original bash/python scripts for a Bottles bottle
 ```
 
 Every operation reports through `progress.Reporter`; the CLI prints steps,
@@ -181,10 +178,3 @@ flatpak run --command=flatpak-builder-lint org.flatpak.Builder appstream data/io
 - Native Access 3.23.0 and 3.25.2 (`KNOWN_GOOD` in `native_access.py`);
   Kontakt 8 Player 8.12.1, Kontakt 6.6.1 (its installer runs unmodified),
   Scarbee Mark I, Butch Vig Drums.
-
-## Legacy scripts
-
-`legacy/` holds the original scripts for running Native Access inside a
-Bottles bottle; `docs/bottles-playbook.md` explains each fix in depth. They
-are kept for reference and for people who prefer Bottles; the app supersedes
-them.
