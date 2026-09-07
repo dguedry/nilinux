@@ -1,7 +1,7 @@
 """Command-line front end. Every subcommand is a thin call into the package."""
 import argparse, sys
 from pathlib import Path
-from . import __version__, paths, wine, native_access as na, products, yabridge, doctor, importer
+from . import __version__, paths, wine, native_access as na, products, yabridge, doctor
 from .progress import ConsoleReporter
 
 def _prefix(create=False) -> wine.Prefix:
@@ -85,17 +85,6 @@ def cmd_sync(a):
     if a.daw_env: yabridge.configure_daw_environment(p, r)
     print(res["summary"])
 
-def cmd_import(a):
-    p = _prefix(); r = ConsoleReporter()
-    bottles = importer.find_bottles()
-    if a.bottle: src = Path(a.bottle)
-    elif len(bottles) == 1: src = bottles[0]
-    elif not bottles: sys.exit("no Bottles setup with Native Access found")
-    else: sys.exit("several found, pick one with --bottle:\n  " + "\n  ".join(map(str, bottles)))
-    res = importer.import_bottle(p, src, r)
-    print(f"imported {res['files']} files, {res['registry_values']} registry values from {src}")
-    yabridge.sync(p, r); products.register_all_libraries(p, r)
-
 def cmd_status(a):
     p = _prefix(); print(yabridge.status(p))
 
@@ -121,8 +110,6 @@ def main(argv=None):
     s = sp.add_parser("sync", help="bridge the prefix's plugins to Linux DAWs with yabridge")
     s.add_argument("dirs", nargs="*", help="extra plugin directories"); s.add_argument("--daw-env", action="store_true", help="make DAWs use the app's wine (WINELOADER)")
     s.set_defaults(f=cmd_sync)
-    s = sp.add_parser("import", help="import an existing Bottles setup (products, licenses, settings, NA login)")
-    s.add_argument("--bottle", help="bottle directory (auto-detected if only one)"); s.set_defaults(f=cmd_import)
     sp.add_parser("status", help="yabridge status").set_defaults(f=cmd_status)
     a = ap.parse_args(argv); a.f(a)
 

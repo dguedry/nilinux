@@ -25,10 +25,6 @@ finish-args:
   - --filesystem=~/.local/bin:create
   - --filesystem=~/.config/yabridgectl:create
   - --filesystem=~/.config/environment.d:create   # "Make DAWs use this wine" (WINELOADER)
-  # import sources (read-only): this app run outside Flatpak, native Bottles. A Bottles
-  # *Flatpak* setup (another app's data dir) is picked through the folder portal instead.
-  - --filesystem=~/.local/share/nilinux:ro
-  - --filesystem=~/.local/share/bottles:ro
   # installers the user picks come through the file-chooser portal; Downloads is the default location
   - --filesystem=xdg-download:ro
   # wineserver keeps its per-prefix socket/lock under $XDG_RUNTIME_DIR/wine:

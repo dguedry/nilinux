@@ -2,7 +2,7 @@
 
 One wine build (pinned, downloaded with hash check) is used for everything:
 the prefix, Native Access, NI apps, and yabridge. That removes the
-"prefix updated by a newer Wine" trap that exists when a Bottles runner and a
+"prefix updated by a newer Wine" trap that exists when the prefix's wine and the
 host wine drift apart.
 """
 import os, re, shutil, subprocess, tarfile, time

@@ -4,7 +4,7 @@ from pathlib import Path
 import gi
 gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk, Gio
-from . import __version__, paths, wine, native_access as na, products, yabridge, doctor, importer
+from . import __version__, paths, wine, native_access as na, products, yabridge, doctor
 from .progress import Reporter, OK, FAIL, SKIP, RUN
 
 APP_ID = "io.github.dguedry.nilinux"
@@ -54,7 +54,7 @@ class Window(Adw.ApplicationWindow):
         tv = Adw.ToolbarView(); self.toasts.set_child(tv)
         self.stack = Adw.ViewStack()
         header = Adw.HeaderBar(); switcher = Adw.ViewSwitcherTitle(stack=self.stack, title=TITLE); header.set_title_widget(switcher)
-        menu = Gio.Menu(); menu.append("Re-run setup / repair", "app.setup"); menu.append("Make DAWs use this wine", "app.dawenv"); menu.append("Import from Bottles…", "app.import"); menu.append("About", "app.about")
+        menu = Gio.Menu(); menu.append("Re-run setup / repair", "app.setup"); menu.append("Make DAWs use this wine", "app.dawenv"); menu.append("About", "app.about")
         header.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu))
         tv.add_top_bar(header); tv.set_content(self.stack)
         self.stack.add_titled_with_icon(self.build_plugins(), "plugins", "Plugins", "audio-x-generic-symbolic")
@@ -223,30 +223,6 @@ class Window(Adw.ApplicationWindow):
             products.run_installer(self.prefix, path, r); return yabridge.sync(self.prefix, r)
         self.run_bg(f"Installing {path.name}", fn)
     def sync(self): self.run_bg("Bridging plugins", lambda r: yabridge.sync(self.prefix, r))
-    def import_bottle(self):
-        bottles = importer.find_bottles()
-        def go(src):
-            def fn(r):
-                res = importer.import_bottle(self.prefix, src, r); products.register_all_libraries(self.prefix, r); yabridge.sync(self.prefix, r); return res
-            self.run_bg(f"Importing {src.name}", fn, lambda res, err: self.toast(f"Imported {res['files']} files") if res else None)
-        if not bottles:
-            # Nothing visible from here (under Flatpak another app's data dir is not
-            # accessible): let the user pick the bottle folder through the portal.
-            start = Path.home() / ".var/app/com.usebottles.bottles/data/bottles/bottles"
-            d = Gtk.FileDialog(title="Choose the bottle folder (contains drive_c)")
-            if start.exists(): d.set_initial_folder(Gio.File.new_for_path(str(start)))
-            def on(dlg, res):
-                try: f = dlg.select_folder_finish(res)
-                except GLib.Error: return
-                src = Path(f.get_path())
-                if not (src / "drive_c").is_dir(): self.toast("That folder has no drive_c — pick the bottle itself"); return
-                go(src)
-            d.select_folder(self, None, on); return
-        if len(bottles) == 1: go(bottles[0]); return
-        dlg = Adw.MessageDialog(transient_for=self, heading="Import which setup?", body="\n".join(b.name for b in bottles))
-        for b in bottles: dlg.add_response(str(b), b.name)
-        dlg.add_response("cancel", "Cancel"); dlg.connect("response", lambda d, resp: go(Path(resp)) if resp != "cancel" else None); dlg.present()
-
     # ---- health page --------------------------------------------------------------------
     def build_health(self):
         page = Adw.PreferencesPage()
@@ -279,7 +255,7 @@ class Window(Adw.ApplicationWindow):
 class App(Adw.Application):
     def __init__(self):
         super().__init__(application_id=APP_ID)
-        for name, cb in (("setup", lambda *_: self.win.run_setup()), ("dawenv", lambda *_: self.win.run_bg("DAW environment", lambda r: yabridge.configure_daw_environment(self.win.prefix, r))), ("import", lambda *_: self.win.import_bottle()), ("about", self.about)):
+        for name, cb in (("setup", lambda *_: self.win.run_setup()), ("dawenv", lambda *_: self.win.run_bg("DAW environment", lambda r: yabridge.configure_daw_environment(self.win.prefix, r))), ("about", self.about)):
             act = Gio.SimpleAction(name=name); act.connect("activate", cb); self.add_action(act)
     def do_activate(self):
         self.win = Window(self); self.win.present()

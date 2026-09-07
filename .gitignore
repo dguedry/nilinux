@@ -8,3 +8,4 @@ flatpak/repo/
 flatpak/.flatpak-builder/
 flatpak/*.flatpak
 .vscode/
+flatpak/*.dev.yml

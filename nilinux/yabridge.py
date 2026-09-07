@@ -124,8 +124,8 @@ def configure_daw_environment(p: Prefix, reporter=None):
     r.ok(f"{f} (re-login to apply)")
 
 def bridged(p: Prefix) -> list[dict]:
-    """Parsed `yabridgectl status`, limited to plugin dirs inside this prefix,
-    deduplicated by plugin name."""
+    """Parsed `yabridgectl status`, limited to plugin dirs inside this prefix
+    (yabridge's config is global and may list other prefixes), deduplicated by plugin name."""
     out, seen, cur_in_prefix = [], set(), False
     root = str(p.drive_c.resolve())
     for line in status(p).splitlines():
@@ -136,13 +136,3 @@ def bridged(p: Prefix) -> list[dict]:
             if name in seen: continue
             seen.add(name); out.append({"name": name, "info": info})
     return out
-
-def foreign_dirs(p: Prefix) -> list[str]:
-    """Registered yabridge plugin dirs that are not inside this prefix (e.g. a Bottles setup)."""
-    root = str(p.drive_c.resolve()); out = []
-    for line in status(p).splitlines():
-        if not line.startswith(" ") and line.rstrip().endswith("/"):
-            d = line.strip()
-            if not str(Path(d).resolve()).startswith(root): out.append(d)
-    return out
-

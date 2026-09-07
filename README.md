@@ -62,7 +62,7 @@ the prefix, logs. Nothing is installed system-wide.
     its own window opens, and the plugins are bridged when it finishes.
   - *Add a plugin folder* / *Bridge plugins now*.
 - **Health** — every fix and prerequisite with a repair hint. The menu has
-  *Re-run setup / repair*, *Make DAWs use this wine*, *Import from Bottles…*.
+  *Re-run setup / repair* and *Make DAWs use this wine*.
 - **Progress** — step list, download bar and log for long tasks.
 
 Bridged plugins land in `~/.vst/yabridge`, `~/.vst3/yabridge`,
@@ -70,7 +70,7 @@ Bridged plugins land in `~/.vst/yabridge`, `~/.vst3/yabridge`,
 
 CLI equivalents: `setup`, `install-na <file>`, `launch [--wait]`,
 `products`, `register`, `install <installer> [--third-party]`, `sync
-[dirs…] [--daw-env]`, `import [--bottle DIR]`, `doctor`, `status`.
+[dirs…] [--daw-env]`, `doctor`, `status`.
 
 ## Native Access updates
 
@@ -118,7 +118,6 @@ nilinux/
   products.py        NI catalogue, installed products, library registration,
                      silent-install-or-trace-deploy for NI apps, third-party installers
   yabridge.py        install, plugin-dir discovery, sync, DAW environment
-  importer.py        Bottles / other-prefix import
   doctor.py, cli.py, gui.py (GTK4 + libadwaita), msi.py, download.py, progress.py
 flatpak/             manifest (GNOME 50 runtime; bundles 7-Zip, cabextract, olefile), build.sh
 data/                desktop entry, AppStream metainfo, icon
@@ -133,7 +132,7 @@ the GUI maps them onto rows. Wine is Kron4ek's portable
 **Flatpak notes.** Wine is downloaded at first run rather than bundled;
 Native Access is neither bundled nor downloaded. Permissions: network,
 X11/Wayland/PulseAudio, DRI, `--allow=devel` (wine), `--filesystem=home`
-(yabridge dirs, installers, Bottles import) and `xdg-run/wine` + `/tmp`
+(yabridge dirs, installers) and `xdg-run/wine`
 (share the prefix's wineserver with a host-side yabridge, which works because
 both run the identical wine binary). `yabridgectl` runs with the host's
 `XDG_CONFIG_HOME`/`XDG_DATA_HOME` because the sandbox remaps them. The app id

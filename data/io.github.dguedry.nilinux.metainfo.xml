@@ -54,7 +54,7 @@
   <releases>
     <release version="0.1.0" date="2026-09-07">
       <description>
-        <p>First release: own Wine environment with every Native Access fix, install of NI applications whose installers fail under Wine, third-party plugin installers, yabridge bridging, import from a Bottles setup, GTK4 GUI and CLI.</p>
+        <p>First release: own Wine environment with every Native Access fix, install of NI applications whose installers fail under Wine, third-party plugin installers, yabridge bridging, GTK4 GUI and CLI.</p>
       </description>
     </release>
   </releases>

@@ -43,7 +43,7 @@ def run(p: wine.Prefix | None = None) -> list[Check]:
         if s["pending_update"]:
             c.append(Check("no pending legacy self-update", False, "apply with: nilinux update, or ignore", fix="nilinux update"))
     # the NTK daemon binds fixed localhost ports; a daemon from another prefix
-    # (e.g. a Bottles setup) blocks ours with "Address in use"
+    # (any other Wine prefix running Native Access) blocks ours with "Address in use"
     import socket
     busy = []
     for port in na.NTK_PORTS:
