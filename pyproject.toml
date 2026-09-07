@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nilinux"
+version = "0.1.0"
+description = "Native Instruments' Native Access, products and VSTs on Linux, without touching Wine yourself"
+requires-python = ">=3.10"
+dependencies = ["olefile>=0.46"]
+
+[project.scripts]
+nilinux = "nilinux.cli:main"
+nilinux-gui = "nilinux.gui:main"
+
+[tool.setuptools]
+packages = ["nilinux"]

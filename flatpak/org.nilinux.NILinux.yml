@@ -1,0 +1,75 @@
+# Flatpak manifest for NI on Linux.
+# Build:  flatpak/build.sh            (flatpak-builder --user --install)
+# Run:    flatpak run org.nilinux.NILinux
+#
+# Wine is NOT bundled: the app downloads a pinned portable wine build into its
+# data dir on first run (same as it does outside the sandbox). That same wine
+# binary is host-visible, so yabridge on the host can run plugins with it.
+app-id: org.nilinux.NILinux
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+command: nilinux-gui
+finish-args:
+  - --share=network                 # NA feed, NI CDN, GitHub (wine, yabridge)
+  - --share=ipc
+  - --socket=x11                    # wine's default display driver
+  - --socket=wayland
+  - --socket=pulseaudio             # standalone NI apps
+  - --device=dri
+  - --allow=devel                   # wine: ptrace/exception handling
+  - --filesystem=home               # yabridge dirs (~/.vst*, ~/.local/share/yabridge), Bottles import, installers
+  - --filesystem=xdg-run/wine       # wineserver sockets live in $XDG_RUNTIME_DIR/wine: share them with host-side yabridge (same wine binary)
+  - --filesystem=/tmp               # older wine builds keep them in /tmp/.wine-<uid>
+  - --env=WINEDLLOVERRIDES=winemenubuilder.exe=d;mscoree=d;mshtml=d
+cleanup:
+  - /include
+  - /share/man
+  - '*.la'
+modules:
+  - name: cabextract
+    buildsystem: autotools
+    sources:
+      - type: archive
+        url: http://deb.debian.org/debian/pool/main/c/cabextract/cabextract_1.11.orig.tar.gz   # upstream site 403s flatpak-builder; identical tarball
+        mirror-urls:
+          - https://www.cabextract.org.uk/cabextract-1.11.tar.gz
+        sha256: b5546db1155e4c718ff3d4b278573604f30dd64c3c5bfd4657cd089b823a3ac6
+
+  - name: 7zip
+    buildsystem: simple
+    build-commands:
+      - make -j$FLATPAK_BUILDER_N_JOBS -C CPP/7zip/Bundles/Alone2 -f makefile.gcc
+      - install -Dm755 CPP/7zip/Bundles/Alone2/_o/7zz /app/bin/7zz
+      - ln -sf 7zz /app/bin/7z
+    sources:
+      - type: archive
+        url: https://github.com/ip7z/7zip/releases/download/24.09/7z2409-src.tar.xz
+        sha256: 49c05169f49572c1128453579af1632a952409ced028259381dac30726b6133a
+        strip-components: 0
+
+  - name: python3-olefile
+    buildsystem: simple
+    build-commands:
+      - pip3 install --verbose --exists-action=i --no-index --find-links="file://${PWD}" --prefix=/app --no-build-isolation olefile
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/69/1b/077b508e3e500e1629d366249c3ccb32f95e50258b231705c09e3c7a4366/olefile-0.47.zip
+        sha256: 599383381a0bf3dfbd932ca0ca6515acd174ed48870cbf7fee123d698c192c1c
+
+  - name: nilinux
+    buildsystem: simple
+    build-commands:
+      - SITE=$(python3 -c "import sysconfig; print(sysconfig.get_paths()['purelib'].replace('/usr', '/app'))"); mkdir -p "$SITE" && cp -r nilinux "$SITE/"
+      - install -Dm755 flatpak/nilinux-gui /app/bin/nilinux-gui
+      - install -Dm755 flatpak/nilinux /app/bin/nilinux
+      - install -Dm644 data/org.nilinux.NILinux.desktop /app/share/applications/org.nilinux.NILinux.desktop
+      - install -Dm644 data/org.nilinux.NILinux.metainfo.xml /app/share/metainfo/org.nilinux.NILinux.metainfo.xml
+      - install -Dm644 data/org.nilinux.NILinux.svg /app/share/icons/hicolor/scalable/apps/org.nilinux.NILinux.svg
+    sources:
+      - type: dir
+        path: ..
+        skip:
+          - .flatpak-builder
+          - build-dir
+          - repo

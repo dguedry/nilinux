@@ -1,0 +1,231 @@
+"""Portable wine provisioning and Wine prefix management.
+
+One wine build (pinned, downloaded with hash check) is used for everything:
+the prefix, Native Access, NI apps, and yabridge. That removes the
+"prefix updated by a newer Wine" trap that exists when a Bottles runner and a
+host wine drift apart.
+"""
+import os, re, shutil, subprocess, tarfile, time
+from pathlib import Path
+from . import paths
+from .progress import null_reporter
+
+# Pinned build. Kron4ek's builds are portable (built against old glibc) and
+# the wow64 flavour needs no 32-bit host libraries. Bump deliberately; the
+# NI fixes were verified on wine-staging 9/10/11 so major bumps are low-risk.
+WINE_BUILD = {
+    "name": "wine-11.17-staging-amd64-wow64",
+    "url": "https://github.com/Kron4ek/Wine-Builds/releases/download/11.17/wine-11.17-staging-amd64-wow64.tar.xz",
+    "sha256": "278d80f3073f1a81386baafb41b83638d89eedaffb640f31599855145ed4fd7b",
+}
+
+class WineBuild:
+    def __init__(self, root: Path):
+        self.root = Path(root)
+    @property
+    def wine(self) -> Path:
+        for n in ("wine", "wine64"):
+            p = self.root / "bin" / n
+            if p.exists(): return p
+        raise FileNotFoundError(f"no wine binary under {self.root}/bin")
+    @property
+    def wineserver(self) -> Path: return self.root / "bin" / "wineserver"
+    def version(self) -> str:
+        try: return subprocess.run([str(self.wine), "--version"], capture_output=True, text=True, timeout=20).stdout.strip()
+        except Exception: return "unknown"
+
+def provision(reporter=None, build=WINE_BUILD) -> WineBuild:
+    """Download+extract the pinned wine build if missing. Returns the build."""
+    r = null_reporter(reporter); paths.ensure_dirs()
+    dest = paths.WINE_DIR / build["name"]
+    if (dest / "bin").exists():
+        return WineBuild(dest)
+    from .download import fetch
+    r.step(f"Downloading wine ({build['name']})")
+    tarball = fetch(build["url"], paths.DOWNLOADS / (build["name"] + ".tar.xz"), sha256=build["sha256"], reporter=r)
+    r.ok()
+    r.step("Extracting wine")
+    tmp = paths.WINE_DIR / (build["name"] + ".tmp")
+    shutil.rmtree(tmp, ignore_errors=True); tmp.mkdir(parents=True)
+    with tarfile.open(tarball, "r:xz") as t:
+        t.extractall(tmp, filter="tar")
+    inner = next(p for p in tmp.iterdir() if p.is_dir())
+    inner.rename(dest); shutil.rmtree(tmp, ignore_errors=True)
+    r.ok(dest.name)
+    return WineBuild(dest)
+
+def installed_build() -> WineBuild | None:
+    dest = paths.WINE_DIR / WINE_BUILD["name"]
+    return WineBuild(dest) if (dest / "bin").exists() else None
+
+
+class Prefix:
+    """A Wine prefix driven by a specific WineBuild.
+
+    All calls set WINEFSYNC=1 and disable winemenubuilder (no .desktop spam).
+    Registry writes go through the explicit 64-bit reg.exe so they land in the
+    64-bit HKLM view that NI's 64-bit apps read.
+    """
+    REG64 = r"C:\windows\system32\reg.exe"
+
+    def __init__(self, path: Path, build: WineBuild):
+        self.path = Path(path); self.build = build
+    @property
+    def drive_c(self) -> Path: return self.path / "drive_c"
+    @property
+    def exists(self) -> bool: return (self.drive_c / "windows").exists()
+
+    def env(self, extra: dict | None = None, debug="-all") -> dict:
+        e = dict(os.environ)
+        e.update({
+            "WINEPREFIX": str(self.path), "WINEFSYNC": "1", "WINEDEBUG": debug,
+            # no .desktop spam; no Wine Mono / Gecko install prompts (nothing NI ships needs .NET or IE)
+            "WINEDLLOVERRIDES": "winemenubuilder.exe=d;mscoree=d;mshtml=d",
+            "WINEARCH": "win64",
+        })
+        # keep our wine first so anything that shells out to `wine` (yabridge) agrees
+        e["PATH"] = f"{self.build.root / 'bin'}:{e.get('PATH', '')}"
+        if extra: e.update(extra)
+        return e
+
+    def run(self, args: list[str], *, timeout=600, capture=True, env: dict | None = None,
+            debug="-all", cwd=None, stderr_to=None) -> subprocess.CompletedProcess:
+        """Run a Windows program in the prefix and wait."""
+        kw = dict(env=self.env(env, debug), timeout=timeout, cwd=cwd)
+        if stderr_to is not None:
+            with open(stderr_to, "wb") as f:
+                return subprocess.run([str(self.build.wine), *args], stdout=subprocess.DEVNULL, stderr=f, **kw)
+        return subprocess.run([str(self.build.wine), *args], capture_output=capture, text=capture, **kw)
+
+    def spawn(self, args: list[str], *, env: dict | None = None, log: Path | None = None) -> subprocess.Popen:
+        """Start a Windows program detached (GUI apps)."""
+        out = open(log, "ab") if log else subprocess.DEVNULL
+        return subprocess.Popen([str(self.build.wine), *args], env=self.env(env), stdout=out, stderr=out,
+                                stdin=subprocess.DEVNULL, start_new_session=True)
+
+    # -- lifecycle ---------------------------------------------------------------
+    def create(self, reporter=None, windows_version="win10"):
+        r = null_reporter(reporter)
+        r.step("Creating Wine prefix")
+        if self.exists: r.skip("exists"); return
+        self.path.mkdir(parents=True, exist_ok=True)
+        self.run(["wineboot", "-u"], timeout=900)
+        self.run(["winecfg", "/v", windows_version], timeout=120)
+        self.wait_idle(); r.ok(str(self.path))
+
+    def wait_idle(self, timeout=120):
+        """Wait for wineserver to exit so registry hives are flushed."""
+        try: subprocess.run([str(self.build.wineserver), "-w"], env=self.env(), timeout=timeout)
+        except subprocess.TimeoutExpired: pass
+
+    def kill(self):
+        subprocess.run([str(self.build.wineserver), "-k"], env=self.env(), timeout=60)
+
+    def processes(self, exe_name: str | None = None) -> list[tuple[int, str]]:
+        """(pid, cmdline) of Windows processes running in *this* prefix
+        (matched by WINEPREFIX in /proc/<pid>/environ)."""
+        out = []
+        want = f"WINEPREFIX={self.path}".encode()
+        for pid_dir in Path("/proc").iterdir():
+            if not pid_dir.name.isdigit(): continue
+            try:
+                env = (pid_dir / "environ").read_bytes()
+                if want not in env.split(b"\0"): continue
+                cmd = (pid_dir / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
+            except OSError: continue
+            if exe_name is None or exe_name.lower() in cmd.lower():
+                out.append((int(pid_dir.name), cmd))
+        return out
+
+    def is_running(self, exe_name: str) -> bool:
+        return any(not c.startswith(("python", "/usr/bin/python", "bash", "/bin/bash", "sh", "/bin/sh"))
+                   for _, c in self.processes(exe_name))
+
+    def wineserver_dir(self) -> Path:
+        """wineserver's per-prefix dir: $XDG_RUNTIME_DIR/wine/server-<dev>-<inode>
+        (modern Wine) or /tmp/.wine-<uid>/server-<dev>-<inode> (fallback)."""
+        st = self.path.stat(); name = f"server-{st.st_dev:x}-{st.st_ino:x}"
+        run = os.environ.get("XDG_RUNTIME_DIR")
+        cands = ([Path(run) / "wine" / name] if run else []) + [Path(f"/tmp/.wine-{os.getuid()}") / name]
+        for c in cands:
+            if (c / "lock").exists(): return c
+        return cands[0]
+
+    def wineserver_running(self) -> bool:
+        """True if a wineserver for *this* prefix is up. wineserver holds an fcntl
+        write lock on <dir>/lock for its lifetime; visible even from another
+        Flatpak instance (processes are namespaced, /tmp is shared)."""
+        lock = self.wineserver_dir() / "lock"
+        if not lock.exists(): return False
+        import fcntl
+        try:
+            with open(lock, "r+b") as f:
+                try:
+                    fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.lockf(f, fcntl.LOCK_UN); return False   # nobody held it
+                except OSError: return True
+        except OSError: return False
+
+    def kill_exe(self, exe_name: str, wait=3.0):
+        import signal
+        for pid, _ in self.processes(exe_name):
+            try: os.kill(pid, signal.SIGTERM)
+            except OSError: pass
+        time.sleep(wait)
+
+    # -- paths ---------------------------------------------------------------------
+    @property
+    def user_dir(self) -> Path:
+        """drive_c/users/<name> (Wine uses the unix login name)."""
+        users = self.drive_c / "users"
+        for cand in (os.environ.get("USER", ""), "steamuser"):
+            if cand and (users / cand).exists(): return users / cand
+        for p in users.iterdir():
+            if p.is_dir() and p.name != "Public": return p
+        return users / (os.environ.get("USER") or "user")
+    @property
+    def public_docs(self) -> Path: return self.drive_c / "users" / "Public" / "Documents"
+    def to_host(self, winpath: str) -> Path:
+        p = winpath.replace("\\", "/")
+        p = re.sub(r"^[Cc]:/?", "", p)
+        return self.drive_c / p
+    def to_win(self, host: Path) -> str:
+        rel = Path(host).resolve().relative_to(self.drive_c.resolve())
+        return "C:\\" + str(rel).replace("/", "\\")
+
+    # -- registry -------------------------------------------------------------------
+    def reg_add(self, key: str, name: str, value: str, kind="REG_SZ"):
+        cp = self.run([self.REG64, "add", key, "/v", name, "/t", kind, "/d", str(value), "/f"], timeout=60)
+        if cp.returncode != 0: raise RuntimeError(f"reg add failed: {key}\\{name}: {cp.stderr.strip()}")
+    def reg_query(self, key: str) -> dict[str, str]:
+        cp = self.run([self.REG64, "query", key], timeout=60)
+        vals = {}
+        for line in cp.stdout.splitlines():
+            m = re.match(r"\s+(\S.*?)\s{2,}(REG_\w+)\s{2,}(.*)$", line)
+            if m: vals[m.group(1)] = m.group(3).strip()
+        return vals
+    def reg_import(self, reg_text: str, name="nilinux-import.reg"):
+        f = self.drive_c / name
+        f.write_text(reg_text, encoding="utf-8")
+        cp = self.run(["regedit", f"C:\\{name}"], timeout=120)
+        return cp.returncode
+
+    def reg_import_values(self, values: dict[str, dict[str, tuple[str, str]]], name="nilinux-values.reg") -> int:
+        """Write many values in one regedit call. values: {'HKLM\\Software\\X': {'Name': ('REG_SZ'|'REG_DWORD'|'REG_EXPAND_SZ', data)}}"""
+        def esc(v): return v.replace("\\", "\\\\").replace('"', '\\"')
+        lines = ["Windows Registry Editor Version 5.00", ""]
+        for key, vals in values.items():
+            root, _, rest = key.partition("\\")
+            root = {"HKLM": "HKEY_LOCAL_MACHINE", "HKCU": "HKEY_CURRENT_USER"}.get(root, root)
+            lines.append(f"[{root}\\{rest}]")
+            for n, (kind, data) in vals.items():
+                if kind == "REG_DWORD": lines.append(f'"{esc(n)}"=dword:{int(data):08x}')
+                elif kind == "REG_EXPAND_SZ":
+                    hexs = ",".join(f"{b:02x}" for b in (str(data) + "\0").encode("utf-16-le")); lines.append(f'"{esc(n)}"=hex(2):{hexs}')
+                else: lines.append(f'"{esc(n)}"="{esc(str(data))}"')
+            lines.append("")
+        return self.reg_import("\r\n".join(lines), name)
+
+    # -- services --------------------------------------------------------------------
+    def sc(self, *args) -> str:
+        return self.run(["sc", *args], timeout=60).stdout

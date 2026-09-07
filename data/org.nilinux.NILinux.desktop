@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=NI on Linux
+Comment=Native Instruments' Native Access, products and Windows VSTs on Linux
+Exec=nilinux-gui
+Icon=org.nilinux.NILinux
+Terminal=false
+Categories=AudioVideo;Audio;
+Keywords=Native Instruments;Kontakt;VST;yabridge;
+StartupNotify=true
