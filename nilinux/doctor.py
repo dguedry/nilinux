@@ -56,6 +56,13 @@ def run(p: wine.Prefix | None = None) -> list[Check]:
     c.append(Check("NTK Daemon ports free or ours", ours or not busy,
                    "daemon running" if ours else (f"ports {busy} held by another process (another prefix's daemon?)" if busy else "daemon not running (starts with Native Access)"),
                    fix="stop the other Native Access / NTKDaemon, then nilinux launch"))
+    # Wine's audio driver speaks the PulseAudio protocol; PipeWire serves that
+    # socket too. Without it, standalone NI apps are silent (DAW use is unaffected).
+    import os
+    pulse = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / "pulse" / "native"
+    c.append(Check("audio server (PulseAudio/PipeWire socket)", pulse.exists(),
+                   str(pulse) if pulse.exists() else "no Pulse/PipeWire socket: standalone NI apps will have no sound (plugins in a DAW are unaffected)",
+                   fix="install and start pipewire-pulse (or pulseaudio)"))
     unreg = [x.name for x in products.installed(p) if x.type == "Content" and not x.registered]
     c.append(Check("libraries registered for Kontakt", not unreg, ", ".join(unreg), fix="nilinux register"))
     yv = yabridge.installed()
