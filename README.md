@@ -84,16 +84,6 @@ kept as `Native Access.prev`. Each NA release can break a fix (3.25 needed a
 GPU workaround 3.23 did not; the dependency patch is tied to one renderer
 build), which is why updates are deliberate.
 
-## Importing an existing Bottles setup
-
-If you already ran Native Access in a Bottles bottle (for example with the
-[legacy playbook](docs/bottles-playbook.md)), *Import from Bottles…* copies
-the NI apps, plugin folders, libraries, licenses, daemon state, Kontakt
-settings and the Native Access login into the app's prefix, re-imports the
-registry keys, and retires the bottle's plugin folders from yabridge. Close
-the Bottles Native Access afterwards: only one NTK daemon can run per
-machine (it binds fixed localhost ports).
-
 ## What the app fixes, and why
 
 Each of these was diagnosed from a real failure; the deep dives are in the
@@ -153,7 +143,7 @@ file, metainfo, icon and `gui.APP_ID`.
 
 ## Tested
 
-- The author's machine (Ubuntu-based, Bottles setup imported).
+- The author's machine (Ubuntu-based).
 - A fresh Fedora 43 Workstation VM: no Steam, no wine, GNOME on Wayland —
   environment setup in 97 s, Native Access and the GUI render, sync works.
 - Native Access 3.23.0 and 3.25.2 (`KNOWN_GOOD` in `native_access.py`);
