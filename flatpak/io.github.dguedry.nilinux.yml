@@ -18,9 +18,25 @@ finish-args:
   - --socket=pulseaudio             # standalone NI apps
   - --device=dri
   - --allow=devel                   # wine: ptrace/exception handling
-  - --filesystem=home               # yabridge dirs (~/.vst*, ~/.local/share/yabridge), Bottles import, installers
-  - --filesystem=xdg-run/wine       # wineserver sockets live in $XDG_RUNTIME_DIR/wine: share them with host-side yabridge (same wine binary)
-  - --filesystem=/tmp               # older wine builds keep them in /tmp/.wine-<uid>
+  # yabridge: bridged plugins and its own files must be where host DAWs look
+  - --filesystem=~/.vst:create
+  - --filesystem=~/.vst3:create
+  - --filesystem=~/.clap:create
+  - --filesystem=~/.local/share/yabridge:create
+  - --filesystem=~/.local/bin:create
+  - --filesystem=~/.config/yabridgectl:create
+  - --filesystem=~/.config/environment.d:create   # "Make DAWs use this wine" (WINELOADER)
+  # import sources (read-only): Bottles setups and this app run outside Flatpak / under its old id
+  - --filesystem=~/.var/app/com.usebottles.bottles/data/bottles:ro
+  - --filesystem=~/.local/share/bottles:ro
+  - --filesystem=~/.local/share/nilinux:ro
+  - --filesystem=~/.var/app/org.nilinux.NILinux:ro
+  # installers the user picks come through the file-chooser portal; Downloads is the default location
+  - --filesystem=xdg-download:ro
+  # wineserver keeps its per-prefix socket/lock under $XDG_RUNTIME_DIR/wine (older builds: /tmp):
+  # share it so a host-side yabridge (DAW) and this app use one wineserver for the prefix
+  - --filesystem=xdg-run/wine:create
+  - --filesystem=/tmp
   - --env=WINEDLLOVERRIDES=winemenubuilder.exe=d;mscoree=d;mshtml=d
 cleanup:
   - /include
@@ -67,9 +83,9 @@ modules:
       - install -Dm644 data/io.github.dguedry.nilinux.metainfo.xml /app/share/metainfo/io.github.dguedry.nilinux.metainfo.xml
       - install -Dm644 data/io.github.dguedry.nilinux.svg /app/share/icons/hicolor/scalable/apps/io.github.dguedry.nilinux.svg
     sources:
-      - type: dir
-        path: ..
-        skip:
-          - .flatpak-builder
-          - build-dir
-          - repo
+      # Flathub builds from the tagged release. flatpak/build.sh swaps this for
+      # the working tree (type: dir) for local development builds.
+      - type: git
+        url: https://github.com/dguedry/nilinux.git
+        tag: v0.1.0
+        commit: TAG_COMMIT_PLACEHOLDER

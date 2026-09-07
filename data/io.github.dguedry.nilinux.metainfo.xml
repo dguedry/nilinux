@@ -2,17 +2,60 @@
 <component type="desktop-application">
   <id>io.github.dguedry.nilinux</id>
   <name>NI on Linux</name>
-  <summary>Native Instruments' Native Access, products and Windows VSTs on Linux</summary>
+  <summary>Native Access, NI products and Windows VSTs in Linux DAWs</summary>
+  <developer id="io.github.dguedry">
+    <name>Donnie Guedry</name>
+  </developer>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
   <description>
     <p>Runs Native Instruments' Native Access and the products it installs on Linux, and makes them available to Linux DAWs. It manages its own Wine environment, applies every fix Native Access needs, installs NI applications whose installers do not run under Wine, runs third-party plugin installers, and bridges VST2, VST3 and CLAP plugins with yabridge — without the user ever dealing with Wine.</p>
-    <p>Not affiliated with or endorsed by Native Instruments GmbH. Native Access is not included: download it from native-instruments.com (the app links to the page) and choose the file in the app. Requires an NI account. A portable Wine build is downloaded on first run.</p>
+    <p>Native Access is not included: download it from native-instruments.com (the app links to the page) and choose the file in the app. Requires an NI account. A portable Wine build is downloaded on first run.</p>
+    <p>Not affiliated with or endorsed by Native Instruments GmbH.</p>
   </description>
   <launchable type="desktop-id">io.github.dguedry.nilinux.desktop</launchable>
+  <provides>
+    <binary>nilinux</binary>
+    <binary>nilinux-gui</binary>
+  </provides>
   <url type="homepage">https://github.com/dguedry/nilinux</url>
+  <url type="bugtracker">https://github.com/dguedry/nilinux/issues</url>
+  <url type="vcs-browser">https://github.com/dguedry/nilinux</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>First run: get Native Access from Native Instruments and hand the installer to the app</caption>
+      <image>https://raw.githubusercontent.com/dguedry/nilinux/main/data/screenshots/get-native-access.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Install tab: Native Access, NI application installers, third-party plugin installers, bridging</caption>
+      <image>https://raw.githubusercontent.com/dguedry/nilinux/main/data/screenshots/install.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Health: every fix and prerequisite, with repair hints</caption>
+      <image>https://raw.githubusercontent.com/dguedry/nilinux/main/data/screenshots/health.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Progress: step list, download bar and log for long tasks</caption>
+      <image>https://raw.githubusercontent.com/dguedry/nilinux/main/data/screenshots/progress.png</image>
+    </screenshot>
+  </screenshots>
+  <branding>
+    <color type="primary" scheme_preference="light">#5ac8fa</color>
+    <color type="primary" scheme_preference="dark">#1e1e24</color>
+  </branding>
   <content_rating type="oars-1.1"/>
+  <requires>
+    <display_length compare="ge">768</display_length>
+  </requires>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
   <releases>
-    <release version="0.1.0" date="2026-09-06"/>
+    <release version="0.1.0" date="2026-09-07">
+      <description>
+        <p>First release: own Wine environment with every Native Access fix, install of NI applications whose installers fail under Wine, third-party plugin installers, yabridge bridging, import from a Bottles setup, GTK4 GUI and CLI.</p>
+      </description>
+    </release>
   </releases>
 </component>
