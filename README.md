@@ -141,6 +141,39 @@ both run the identical wine binary). `yabridgectl` runs with the host's
 or GitHub account you control, changed consistently in the manifest, desktop
 file, metainfo, icon and `gui.APP_ID`.
 
+## Submitting to Flathub
+
+The committed manifest already passes `flatpak-builder-lint` (only the
+"app id URL not reachable" error remains while the repository is private).
+The submission is a pull request carrying the manifest, not a bundle:
+
+1. Make this repository public (the manifest builds from the `v0.1.0` tag,
+   and the metainfo's screenshot URLs point at `main`).
+2. Fork <https://github.com/flathub/flathub>, then:
+   ```bash
+   git clone --branch new-pr git@github.com:<you>/flathub.git flathub-pr
+   cd flathub-pr && git checkout -b io.github.dguedry.nilinux
+   cp ../nilinux/flatpak/io.github.dguedry.nilinux.yml ../nilinux/flatpak/flathub.json .
+   git add . && git commit -m "Add io.github.dguedry.nilinux" && git push -u origin HEAD
+   ```
+   Open the PR against `flathub:new-pr`. Its template asks whether you are
+   the developer (yes), where the app is otherwise published (this repo),
+   and about permissions — the manifest's comments give the reasons.
+3. The Flathub bot posts a test-build link; reviewers then look at
+   permissions, metainfo and licensing. Points to expect: Wine and yabridge
+   are downloaded at run time (Bottles is the precedent), Native Access is
+   user-supplied, `--allow=devel` is for Wine's exception handling, and the
+   name/icon must not suggest NI affiliation (the metainfo disclaims it).
+4. After the merge you get a `flathub/io.github.dguedry.nilinux` repository;
+   future releases are PRs there bumping the tag/commit.
+
+Lint locally before every submission:
+```bash
+flatpak install flathub org.flatpak.Builder
+flatpak run --command=flatpak-builder-lint org.flatpak.Builder manifest flatpak/io.github.dguedry.nilinux.yml
+flatpak run --command=flatpak-builder-lint org.flatpak.Builder appstream data/io.github.dguedry.nilinux.metainfo.xml
+```
+
 ## Tested
 
 - The author's machine (Ubuntu-based).
