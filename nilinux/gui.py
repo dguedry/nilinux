@@ -225,11 +225,23 @@ class Window(Adw.ApplicationWindow):
     def sync(self): self.run_bg("Bridging plugins", lambda r: yabridge.sync(self.prefix, r))
     def import_bottle(self):
         bottles = importer.find_bottles()
-        if not bottles: self.toast("No Bottles setup with Native Access found"); return
         def go(src):
             def fn(r):
                 res = importer.import_bottle(self.prefix, src, r); products.register_all_libraries(self.prefix, r); yabridge.sync(self.prefix, r); return res
             self.run_bg(f"Importing {src.name}", fn, lambda res, err: self.toast(f"Imported {res['files']} files") if res else None)
+        if not bottles:
+            # Nothing visible from here (under Flatpak another app's data dir is not
+            # accessible): let the user pick the bottle folder through the portal.
+            start = Path.home() / ".var/app/com.usebottles.bottles/data/bottles/bottles"
+            d = Gtk.FileDialog(title="Choose the bottle folder (contains drive_c)")
+            if start.exists(): d.set_initial_folder(Gio.File.new_for_path(str(start)))
+            def on(dlg, res):
+                try: f = dlg.select_folder_finish(res)
+                except GLib.Error: return
+                src = Path(f.get_path())
+                if not (src / "drive_c").is_dir(): self.toast("That folder has no drive_c — pick the bottle itself"); return
+                go(src)
+            d.select_folder(self, None, on); return
         if len(bottles) == 1: go(bottles[0]); return
         dlg = Adw.MessageDialog(transient_for=self, heading="Import which setup?", body="\n".join(b.name for b in bottles))
         for b in bottles: dlg.add_response(str(b), b.name)

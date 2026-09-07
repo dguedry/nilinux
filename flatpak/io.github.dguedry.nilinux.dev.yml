@@ -82,7 +82,6 @@ modules:
     sources:
       # Flathub builds from the tagged release. flatpak/build.sh swaps this for
       # the working tree (type: dir) for local development builds.
-      - type: git
-        url: https://github.com/dguedry/nilinux.git
-        tag: v0.1.0
-        commit: 460b3d10cbc66b3462ad71ef4fdbbdbaf7d9f01a
+      - type: dir
+        path: ..
+        skip: [.flatpak-builder, build-dir, repo, .git]
