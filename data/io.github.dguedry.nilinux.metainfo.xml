@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>org.nilinux.NILinux</id>
+  <id>io.github.dguedry.nilinux</id>
   <name>NI on Linux</name>
   <summary>Native Instruments' Native Access, products and Windows VSTs on Linux</summary>
   <metadata_license>CC0-1.0</metadata_license>
@@ -9,7 +9,7 @@
     <p>Runs Native Instruments' Native Access and the products it installs on Linux, and makes them available to Linux DAWs. It manages its own Wine environment, applies every fix Native Access needs, installs NI applications whose installers do not run under Wine, runs third-party plugin installers, and bridges VST2, VST3 and CLAP plugins with yabridge — without the user ever dealing with Wine.</p>
     <p>Not affiliated with or endorsed by Native Instruments GmbH. Native Access is not included: download it from native-instruments.com (the app links to the page) and choose the file in the app. Requires an NI account. A portable Wine build is downloaded on first run.</p>
   </description>
-  <launchable type="desktop-id">org.nilinux.NILinux.desktop</launchable>
+  <launchable type="desktop-id">io.github.dguedry.nilinux.desktop</launchable>
   <url type="homepage">https://github.com/dguedry/nilinux</url>
   <content_rating type="oars-1.1"/>
   <releases>

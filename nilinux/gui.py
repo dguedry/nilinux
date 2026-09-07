@@ -7,7 +7,7 @@ from gi.repository import Adw, GLib, Gtk, Gio
 from . import __version__, paths, wine, native_access as na, products, yabridge, doctor, importer
 from .progress import Reporter, OK, FAIL, SKIP, RUN
 
-APP_ID = "org.nilinux.NILinux"
+APP_ID = "io.github.dguedry.nilinux"
 TITLE = "NI on Linux"
 
 def ui(fn, *a):

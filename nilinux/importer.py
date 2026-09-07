@@ -11,7 +11,8 @@ BOTTLE_ROOTS = [
     Path.home() / ".var/app/com.usebottles.bottles/data/bottles/bottles",   # Bottles flatpak
     Path.home() / ".local/share/bottles/bottles",                            # Bottles native
     Path.home() / ".local/share/nilinux",                                    # this app run outside Flatpak ("prefix")
-    Path.home() / ".var/app/org.nilinux.NILinux/data/nilinux",              # this app as a Flatpak
+    Path.home() / ".var/app/io.github.dguedry.nilinux/data/nilinux",       # this app as a Flatpak
+    Path.home() / ".var/app/org.nilinux.NILinux/data/nilinux",             # pre-rename Flatpak id
 ]
 # Program Files entries that are Wine's own or ours — everything else (vendor
 # folders such as "ACE Studio") is copied too, so third-party plugins survive.

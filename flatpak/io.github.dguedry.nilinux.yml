@@ -1,11 +1,11 @@
 # Flatpak manifest for NI on Linux.
 # Build:  flatpak/build.sh            (flatpak-builder --user --install)
-# Run:    flatpak run org.nilinux.NILinux
+# Run:    flatpak run io.github.dguedry.nilinux
 #
 # Wine is NOT bundled: the app downloads a pinned portable wine build into its
 # data dir on first run (same as it does outside the sandbox). That same wine
 # binary is host-visible, so yabridge on the host can run plugins with it.
-app-id: org.nilinux.NILinux
+app-id: io.github.dguedry.nilinux
 runtime: org.gnome.Platform
 runtime-version: '50'
 sdk: org.gnome.Sdk
@@ -63,9 +63,9 @@ modules:
       - SITE=$(python3 -c "import sysconfig; print(sysconfig.get_paths()['purelib'].replace('/usr', '/app'))"); mkdir -p "$SITE" && cp -r nilinux "$SITE/"
       - install -Dm755 flatpak/nilinux-gui /app/bin/nilinux-gui
       - install -Dm755 flatpak/nilinux /app/bin/nilinux
-      - install -Dm644 data/org.nilinux.NILinux.desktop /app/share/applications/org.nilinux.NILinux.desktop
-      - install -Dm644 data/org.nilinux.NILinux.metainfo.xml /app/share/metainfo/org.nilinux.NILinux.metainfo.xml
-      - install -Dm644 data/org.nilinux.NILinux.svg /app/share/icons/hicolor/scalable/apps/org.nilinux.NILinux.svg
+      - install -Dm644 data/io.github.dguedry.nilinux.desktop /app/share/applications/io.github.dguedry.nilinux.desktop
+      - install -Dm644 data/io.github.dguedry.nilinux.metainfo.xml /app/share/metainfo/io.github.dguedry.nilinux.metainfo.xml
+      - install -Dm644 data/io.github.dguedry.nilinux.svg /app/share/icons/hicolor/scalable/apps/io.github.dguedry.nilinux.svg
     sources:
       - type: dir
         path: ..

@@ -18,8 +18,8 @@ not included: you download it from NI and hand the file to the app.*
 
 ```bash
 flatpak/build.sh                      # builds against org.gnome.Platform 50, installs for the user
-flatpak run org.nilinux.NILinux       # GUI
-flatpak run --command=nilinux org.nilinux.NILinux doctor   # CLI
+flatpak run io.github.dguedry.nilinux       # GUI
+flatpak run --command=nilinux io.github.dguedry.nilinux doctor   # CLI
 ```
 
 or, from a prebuilt bundle: `flatpak install --user nilinux.flatpak`.
@@ -33,7 +33,7 @@ python3 -m nilinux --help             # CLI
 ```
 
 The app keeps everything under `~/.local/share/nilinux` (Flatpak:
-`~/.var/app/org.nilinux.NILinux/data/nilinux`): a pinned portable Wine build,
+`~/.var/app/io.github.dguedry.nilinux/data/nilinux`): a pinned portable Wine build,
 the prefix, logs. Nothing is installed system-wide.
 
 ## First run
@@ -137,7 +137,7 @@ X11/Wayland/PulseAudio, DRI, `--allow=devel` (wine), `--filesystem=home`
 (share the prefix's wineserver with a host-side yabridge, which works because
 both run the identical wine binary). `yabridgectl` runs with the host's
 `XDG_CONFIG_HOME`/`XDG_DATA_HOME` because the sandbox remaps them. The app id
-`org.nilinux.NILinux` is a placeholder; Flathub needs an id under a domain
+`io.github.dguedry.nilinux` is a placeholder; Flathub needs an id under a domain
 or GitHub account you control, changed consistently in the manifest, desktop
 file, metainfo, icon and `gui.APP_ID`.
 
