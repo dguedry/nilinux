@@ -163,12 +163,23 @@ The submission is a pull request carrying the manifest, not a bundle:
 4. After the merge you get a `flathub/io.github.dguedry.nilinux` repository;
    future releases are PRs there bumping the tag/commit.
 
-Lint locally before every submission:
+Lint locally before every submission (this is what Flathub's bot runs):
 ```bash
 flatpak install flathub org.flatpak.Builder
-flatpak run --command=flatpak-builder-lint org.flatpak.Builder manifest flatpak/io.github.dguedry.nilinux.yml
-flatpak run --command=flatpak-builder-lint org.flatpak.Builder appstream data/io.github.dguedry.nilinux.metainfo.xml
+L="flatpak run --command=flatpak-builder-lint org.flatpak.Builder"
+$L manifest flatpak/io.github.dguedry.nilinux.yml
+$L appstream data/io.github.dguedry.nilinux.metainfo.xml
+# repo check: build with Flathub's own builder, cache disabled (the cached
+# finish stage ignores the mirroring flags), mirroring screenshots
+cd flatpak && flatpak run --command=flatpak-builder org.flatpak.Builder --user --force-clean \
+  --disable-cache --ccache --repo=repo-flathub --compose-url-policy=full \
+  --mirror-screenshots-url=https://dl.flathub.org/media/ build-flathub io.github.dguedry.nilinux.yml
+ostree commit --repo=repo-flathub --canonical-permissions --branch=screenshots/x86_64 \
+  build-flathub/files/share/app-info/media
+$L repo repo-flathub
 ```
+
+Submission: <https://github.com/flathub/flathub/pull/10121> (2026-09-07).
 
 ## Tested
 
