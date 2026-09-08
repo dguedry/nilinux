@@ -81,4 +81,4 @@ modules:
       - type: git
         url: https://github.com/dguedry/nilinux.git
         tag: v0.1.0
-        commit: 34313a1adecd44846f219ecd4781b64b4b2b90d2
+        commit: a3695fa60fc40749a870a822b32c301cbf5b058f
