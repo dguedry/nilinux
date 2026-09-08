@@ -16,9 +16,9 @@ not included: you download it from NI and hand the file to the app.*
 
 ## Install
 
-**Flatpak (recommended).** Download the current build and install it for
-your user (the link always points at the latest release; CI builds it from
-the tagged source):
+**Flatpak (recommended).** **[Download nilinux.flatpak (latest release)](https://github.com/dguedry/nilinux/releases/latest/download/nilinux.flatpak)**
+— or pick a version on the [releases page](https://github.com/dguedry/nilinux/releases).
+Then install it for your user; or from a terminal:
 
 ```bash
 curl -LO https://github.com/dguedry/nilinux/releases/latest/download/nilinux.flatpak
