@@ -16,7 +16,16 @@ not included: you download it from NI and hand the file to the app.*
 
 ## Install
 
-**Flatpak (recommended).** Build a bundle and install it for your user:
+**Flatpak (recommended).** Download the current build and install it for
+your user (the link always points at the latest release; CI builds it from
+the tagged source):
+
+```bash
+curl -LO https://github.com/dguedry/nilinux/releases/latest/download/nilinux.flatpak
+flatpak install --user nilinux.flatpak     # needs the flathub remote for the GNOME 50 runtime
+```
+
+Or build it yourself:
 
 ```bash
 flatpak/build.sh                      # builds against org.gnome.Platform 50, installs for the user
@@ -24,7 +33,8 @@ flatpak run io.github.dguedry.nilinux       # GUI
 flatpak run --command=nilinux io.github.dguedry.nilinux doctor   # CLI
 ```
 
-or, from a prebuilt bundle: `flatpak install --user nilinux.flatpak`.
+Per-commit builds are attached to each [CI run](https://github.com/dguedry/nilinux/actions/workflows/ci.yml)
+as the `nilinux-flatpak` artifact.
 
 **From source (no Flatpak).** Needs Python ≥ 3.10, GTK4 + libadwaita bindings
 (`python3-gi`), `7z`, `cabextract`, and `pip install olefile`:
