@@ -80,4 +80,4 @@ modules:
       # the working tree (type: dir) for local development builds.
       - type: dir
         path: ..
-        skip: [.flatpak-builder, build-dir, repo, .git]
+        skip: [.flatpak-builder, build-dir, build-flathub, repo, repo-flathub, .git]

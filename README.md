@@ -1,5 +1,7 @@
 # NI on Linux (`nilinux`)
 
+[![CI](https://github.com/dguedry/nilinux/actions/workflows/ci.yml/badge.svg)](https://github.com/dguedry/nilinux/actions/workflows/ci.yml)
+
 Run Native Instruments' **Native Access**, the products it installs, and any
 Windows VST2 / VST3 / CLAP plugin on Linux — and use them in Linux DAWs —
 without ever touching Wine yourself.
@@ -125,6 +127,11 @@ data/                desktop entry, AppStream metainfo, icon
 Every operation reports through `progress.Reporter`; the CLI prints steps,
 the GUI maps them onto rows. Wine is Kron4ek's portable
 `wine-11.17-staging-amd64-wow64`, pinned by hash in `wine.py`.
+
+**CI.** Every push and pull request runs Flathub's linter on the manifest
+and metainfo, a Python syntax/import check, and a full Flatpak build of the
+working tree in Flathub's GNOME 50 container; the built bundle
+(`nilinux.flatpak`) is attached to the run as an artifact.
 
 **Flatpak notes.** Wine is downloaded at first run rather than bundled;
 Native Access is neither bundled nor downloaded. Permissions: network,

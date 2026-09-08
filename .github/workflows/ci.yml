@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+jobs:
+  lint:
+    name: Flathub linter (manifest, metainfo)
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub/flatpak-builder-lint:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint manifest
+        run: flatpak-builder-lint manifest flatpak/io.github.dguedry.nilinux.yml
+      - name: Lint metainfo
+        run: flatpak-builder-lint appstream data/io.github.dguedry.nilinux.metainfo.xml
+
+  python:
+    name: Python syntax and imports
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install olefile
+      - run: python -m compileall -q nilinux
+      - name: Import every non-GUI module
+        run: python -c "import nilinux, nilinux.cli, nilinux.doctor, nilinux.products, nilinux.native_access, nilinux.yabridge, nilinux.wine, nilinux.msi, nilinux.download, nilinux.progress, nilinux.paths"
+      - run: python -m nilinux --help
+
+  flatpak:
+    name: Flatpak build (working tree)
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate working-tree manifest
+        run: python3 flatpak/dev-manifest.py
+      - uses: flathub-infra/flatpak-github-actions/flatpak-builder@933e9e8ca36e85046ebca8e211f0785c6becac40
+        with:
+          manifest-path: flatpak/io.github.dguedry.nilinux.dev.yml
+          bundle: nilinux.flatpak
+          cache-key: flatpak-builder-${{ hashFiles('flatpak/io.github.dguedry.nilinux.yml') }}
