@@ -147,13 +147,13 @@ class Window(Adw.ApplicationWindow):
             def show():
                 rows = []
                 for p in prods:
-                    row = Adw.ActionRow(title=p.name, subtitle=f"{p.type or '?'} {p.version}".strip())
+                    row = Adw.ActionRow(title=GLib.markup_escape_text(p.name), subtitle=GLib.markup_escape_text(f"{p.type or '?'} {p.version}".strip()))
                     for txt, ok in (("registered" if p.registered else "not registered", p.registered), ("licensed" if p.licensed else "no license", p.licensed)):
                         lbl = Gtk.Label(label=txt, css_classes=["caption", "dim-label" if ok else "warning"]); row.add_suffix(lbl)
                     rows.append(row)
                 if not rows: rows.append(Adw.ActionRow(title="Nothing installed yet", subtitle="Open Native Access from the Install tab"))
                 self._fill(self.products_group, rows)
-                brows = [Adw.ActionRow(title=b["name"], subtitle=b["info"]) for b in bridged]
+                brows = [Adw.ActionRow(title=GLib.markup_escape_text(b["name"]), subtitle=GLib.markup_escape_text(b["info"])) for b in bridged]
                 if not brows: brows.append(Adw.ActionRow(title="No bridged plugins yet", subtitle="Install a product, then Sync"))
                 self._fill(self.bridged_group, brows)
             ui(show)
@@ -234,7 +234,7 @@ class Window(Adw.ApplicationWindow):
             def show():
                 rows = []
                 for c in checks:
-                    row = Adw.ActionRow(title=c.name, subtitle=(c.detail + (f"  ·  fix: {c.fix}" if not c.ok and c.fix else "")))
+                    row = Adw.ActionRow(title=c.name, subtitle=GLib.markup_escape_text(c.detail + (f"  ·  fix: {c.fix}" if not c.ok and c.fix else "")))
                     row.add_suffix(Gtk.Image(icon_name="emblem-ok-symbolic" if c.ok else "dialog-warning-symbolic")); rows.append(row)
                 self._fill(self.health_group, rows)
             ui(show)
@@ -257,6 +257,10 @@ class App(Adw.Application):
         super().__init__(application_id=APP_ID)
         for name, cb in (("setup", lambda *_: self.win.run_setup()), ("dawenv", lambda *_: self.win.run_bg("DAW environment", lambda r: yabridge.configure_daw_environment(self.win.prefix, r))), ("about", self.about)):
             act = Gio.SimpleAction(name=name); act.connect("activate", cb); self.add_action(act)
+        # Ctrl+1..4 switch tabs (keyboard access to the view switcher)
+        for i, page in enumerate(("plugins", "install", "health", "task"), start=1):
+            act = Gio.SimpleAction(name=f"tab{i}"); act.connect("activate", lambda *_, p=page: self.win.stack.set_visible_child_name(p))
+            self.add_action(act); self.set_accels_for_action(f"app.tab{i}", [f"<Control>{i}"])
     def do_activate(self):
         self.win = Window(self); self.win.present()
     def about(self, *_):
