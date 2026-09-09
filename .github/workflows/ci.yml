@@ -16,14 +16,14 @@ jobs:
   # does NOT start a second run (GitHub's loop-prevention), so we do not rely on
   # the tag re-triggering CI; the release job keys off this job's output instead.
   #
-  # Skips: an explicit "[no-release]" in the message, and the bot's own bump
-  # commit (whose message carries [no-release]) — so no release-of-a-release loop.
+  # Opt out of a release by ending the commit SUBJECT with [no-release]. The skip
+  # is decided inside the step from the subject line only (git log -1 --pretty=%s),
+  # not the whole message — so a commit that merely mentions the marker in its body
+  # (like this file's own history) still releases. The bot's bump commit puts the
+  # marker in its subject, so it self-skips: no release-of-a-release loop.
   auto-tag:
     name: Auto-tag next patch (push to main)
-    if: >-
-      github.event_name == 'push'
-      && github.ref == 'refs/heads/main'
-      && !contains(github.event.head_commit.message, '[no-release]')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -40,6 +40,11 @@ jobs:
       - id: cut
         run: |
           set -euo pipefail
+          SUBJECT="$(git log -1 --pretty=%s)"
+          case "$SUBJECT" in
+            *"[no-release]")  echo "subject ends with [no-release]; not releasing"; exit 0 ;;
+          esac
+
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
 
@@ -48,15 +53,12 @@ jobs:
             echo "tag v$VERSION already exists; skipping"; exit 0
           fi
 
-          NOTE="$(git log -1 --pretty=%s)"     # changelog = the push's commit subject
+          NOTE="$SUBJECT"     # changelog = the push's commit subject
           python3 scripts/bump.py "$VERSION" "$NOTE"
 
           git add nilinux/__init__.py pyproject.toml data/io.github.dguedry.nilinux.metainfo.xml
-          git commit -m "Release $VERSION
-
-          $NOTE
-
-          Auto-released on push to main. [no-release]"
+          # subject ENDS with [no-release] so this bump commit self-skips on its own push
+          printf '%s\n\n%s\n' "Release $VERSION [no-release]" "$NOTE" | git commit -F -
           git tag -a "v$VERSION" -m "nilinux $VERSION"
           git push origin HEAD:main
           git push origin "v$VERSION"
