@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.3" date="2026-09-09">
+      <description>
+        <p>CI: decide the release skip from the commit subject only</p>
+      </description>
+    </release>
     <release version="0.1.2" date="2026-09-09">
       <description>
         <p>Share /tmp so DAW plugins and the NTK daemon use one wineserver</p>
