@@ -26,6 +26,19 @@ def run(p: wine.Prefix | None = None) -> list[Check]:
     if not p.exists: return c
     s = na.status(p)
     c.append(Check("prefix prepared (fonts, C runtime)", s["prepared"], fix="nilinux setup"))
+    foreign = p.foreign_dlls()
+    c.append(Check("prefix files from this wine", not foreign,
+                   f"{', '.join(foreign)} were written by another Wine (a DAW using the host wine?)" if foreign else "",
+                   fix="nilinux setup (refreshes them); then 'Make DAWs use this wine'"))
+    # NI's setup exes are 32-bit; inside a Flatpak without --allow=multiarch every
+    # 32-bit program fails at once ("Application could not be started", daemon error 731)
+    cp = p.run([r"C:\windows\syswow64\cmd.exe", "/c", "echo ok"], timeout=120)
+    c.append(Check("32-bit programs run (WoW64)", cp.returncode == 0 and "ok" in cp.stdout,
+                   "" if cp.returncode == 0 else "cannot start a 32-bit program: NI installers will fail (Flatpak: needs --allow=multiarch)",
+                   fix="reinstall the current Flatpak build"))
+    loc, ok = na.download_location_status(p)
+    c.append(Check("NA download location writable", ok, loc if ok else (f"{loc}: not writable from here" if loc else "unset: every download fails"),
+                   fix="nilinux launch (re-applies) or nilinux setup"))
     c.append(Check("Native Access installed", s["installed"], s["version"] or "",
                    fix=f"download from {na.NA_DOWNLOAD_PAGE}, then: nilinux install-na <file>"))
     if s["installed"]:
@@ -67,9 +80,7 @@ def run(p: wine.Prefix | None = None) -> list[Check]:
     c.append(Check("libraries registered for Kontakt", not unreg, ", ".join(unreg), fix="nilinux register"))
     yv = yabridge.installed()
     c.append(Check("yabridge", yv is not None, yv or "", fix="nilinux sync"))
-    host = shutil.which("wine")
-    if host and b:
-        hv = subprocess.run([host, "--version"], capture_output=True, text=True).stdout.strip()
-        c.append(Check("DAW wine == app wine", Path(host).resolve() == b.wine.resolve() or yabridge.daw_environment_file().exists(),
-                       f"PATH wine is {hv}; DAWs will use it unless WINELOADER is set", fix="nilinux sync --daw-env"))
+    st, detail = yabridge.daw_environment_status(p)
+    c.append(Check("DAWs run plugins with this wine", st == "active", detail,
+                   fix="log out and back in" if st == "pending" else "nilinux setup"))
     return c

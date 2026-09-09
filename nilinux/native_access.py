@@ -287,6 +287,51 @@ def config(p: Prefix, reporter=None):
                 f.write_text(json.dumps(j, indent=2)); n += 1
     r.ok(f"{n} file(s) updated" if n else "nothing to change (first run)")
 
+# --- fix 8: a writable download location ------------------------------------------------------------
+NA_PREFS_KEY = r"HKCU\Software\Native Instruments\Native Access"
+
+def default_download_dir(p: Prefix) -> Path:
+    """C:\\users\\Public\\Downloads: inside the prefix, next to NA's content location
+    (Public\\Documents). Wine turns the per-user Downloads folder into a symlink to
+    the host's ~/Downloads, which the Flatpak sandbox mounts read-only; Public
+    folders are never symlinked, so this one is always writable."""
+    return p.drive_c / "users/Public/Downloads"
+
+def writable_dir(host: Path) -> bool:
+    """Can we create a file there? (os.access says yes on a read-only bind mount, so really try.)"""
+    try:
+        host.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(dir=host, prefix=".nilinux-write-test-"): pass
+        return True
+    except OSError: return False
+
+def download_location_status(p: Prefix) -> tuple[str, bool]:
+    """(NA's configured download location as a Windows path, or '' when unset; writable from here)"""
+    cur = p.reg_query(NA_PREFS_KEY).get("DownloadLocation", "")
+    return cur, bool(cur) and writable_dir(p.to_host(cur))
+
+def download_location(p: Prefix, reporter=None) -> bool:
+    """A fresh prefix has no download location at all (the daemon then fails every
+    download with "Download folder does not exist"), and a location on the host's
+    ~/Downloads is read-only inside the sandbox ("could not create new file").
+    Keep a user-chosen location that works; otherwise point NA at
+    default_download_dir. Returns True if the preference was changed."""
+    r = null_reporter(reporter)
+    r.step("Download location")
+    cur, ok = download_location_status(p)
+    if ok: r.skip(cur); return False
+    d = default_download_dir(p); d.mkdir(parents=True, exist_ok=True)
+    win = p.to_win(d)
+    # The NTK daemon serves these preferences to NA from memory, read at its start:
+    # restart it around the write so NA sees the new value without a prefix reboot.
+    # (sc talks to the prefix's services.exe, so this works across Flatpak instances.)
+    running = "RUNNING" in p.sc("query", "NTKDaemon")
+    if running: p.sc("stop", "NTKDaemon"); time.sleep(2)
+    p.reg_add(NA_PREFS_KEY, "DownloadLocation", win)
+    if running: p.sc("start", "NTKDaemon")
+    r.ok(f"{win} (was {cur}: not writable)" if cur else f"{win} (was unset)")
+    return True
+
 # --- asar patching (fixes 6 and 7) -----------------------------------------------------------------------------
 def _patch_asar(p: Prefix, edits: dict[str, "callable"], reporter=None) -> dict[str, str]:
     """Rewrite entries of NA's app.asar. edits: {path regex: fn(bytes) -> bytes | None}
@@ -435,6 +480,7 @@ def launch(p: Prefix, reporter=None, extra_args=()) -> subprocess.Popen:
     if p.is_running("Native Access.exe"): p.kill_exe("Native Access.exe")
     clear_stale_mutexes(p)
     if stack_patch(exe) == "patched": r.log("re-applied stack patch (NA updated itself)")
+    download_location(p, r)
     paths.ensure_dirs()
     log = paths.LOGS / "native-access-launch.log"
     # --disable-gpu: NA >= 3.25's GPU process crash-loops under Wine (blank window)
@@ -456,10 +502,11 @@ def apply_pending_update(p: Prefix, reporter=None) -> bool:
 def prepare(p: Prefix, reporter=None):
     """Everything that does not need Native Access: prefix, fonts, C runtime, registry."""
     r = null_reporter(reporter)
-    p.create(r); fonts(p, r); vc_runtime(p, r); registry(p, r); p.wait_idle()
+    p.create(r); p.refresh_builtins(r); fonts(p, r); vc_runtime(p, r); registry(p, r); download_location(p, r); p.wait_idle()
     from . import yabridge
     try: yabridge.install(r)      # so DAW bridging works from the first product install
     except Exception as e: r.step("Installing yabridge"); r.fail(str(e)[:80])
+    yabridge.configure_daw_environment(p, r)   # DAWs must run plugins with *this* wine (see yabridge.daw_environment_status)
 
 def install_native_access(p: Prefix, installer: Path, reporter=None):
     """Install (or update) NA from an installer the user downloaded from NI, then apply the NA-side fixes."""
@@ -470,13 +517,13 @@ def install_native_access(p: Prefix, installer: Path, reporter=None):
     if not (p.drive_c / "windows/Fonts/DejaVuSans.ttf").exists(): prepare(p, r)
     install(p, installer, r)
     r.step("Patching Native Access.exe stack reserve to 64MB"); r.ok(stack_patch(na_exe(p)))
-    disable_self_update(p, r); ntk_daemon(p, r); config(p, r); dependency_patch(p, r); p.wait_idle()
+    disable_self_update(p, r); ntk_daemon(p, r); config(p, r); download_location(p, r); dependency_patch(p, r); p.wait_idle()
 
 def install_native_access_fixes(p: Prefix, reporter=None):
     """Re-apply the NA-side fixes to an already installed Native Access (repair)."""
     r = null_reporter(reporter)
     r.step("Patching Native Access.exe stack reserve to 64MB"); r.ok(stack_patch(na_exe(p)))
-    disable_self_update(p, r); ntk_daemon(p, r); config(p, r); dependency_patch(p, r); p.wait_idle()
+    disable_self_update(p, r); ntk_daemon(p, r); config(p, r); download_location(p, r); dependency_patch(p, r); p.wait_idle()
 
 def setup(p: Prefix, reporter=None, installer: Path | None = None):
     """prepare(); then install NA if an installer path is given. Native Access

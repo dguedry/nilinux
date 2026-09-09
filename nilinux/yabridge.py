@@ -91,6 +91,13 @@ def plugin_dirs(p: Prefix, extras=()) -> list[Path]:
 def sync(p: Prefix, reporter=None, extras=()) -> dict:
     r = null_reporter(reporter)
     install(r)
+    # Never hand plugins to a DAW that would run them with another Wine: its
+    # prefix update replaces this prefix's DLLs (seen with the host's wine 9.0).
+    configure_daw_environment(p, r)
+    st, detail = daw_environment_status(p)
+    if st != "active":
+        r.step("Bridging plugins"); r.skip(f"not yet — {detail}")
+        return {"dirs": [], "returncode": 0, "output": "", "summary": f"plugins not bridged: {detail}", "skipped": st}
     dirs = plugin_dirs(p, extras)
     r.step("Registering plugin directories")
     env = _yctl_env(p)
@@ -113,15 +120,67 @@ def status(p: Prefix) -> str:
 def daw_environment_file() -> Path:
     return Path.home() / ".config/environment.d/50-nilinux.conf"
 
-def configure_daw_environment(p: Prefix, reporter=None):
-    """Make DAWs (launched from the desktop session) run yabridge plugins with
-    the app's wine: WINELOADER via systemd user environment.d. Takes effect at
-    next login."""
+WINE_SHIM = Path.home() / ".local/bin/wine"
+SHIM_MARK = "# nilinux: DAWs run yabridge plugins with the app's wine (same build as the prefix)"
+
+def daw_environment_content(p: Prefix) -> str:
+    return f"WINELOADER={p.build.wine}\nWINEFSYNC=1\n"
+
+def shim_content(p: Prefix) -> str:
+    return f'#!/bin/sh\n{SHIM_MARK}\nexport WINEFSYNC=1\nexec "{p.build.wine}" "$@"\n'
+
+def shim_is_ours(p: Prefix) -> bool:
+    f = WINE_SHIM
+    try:
+        if f.is_symlink(): return f.resolve() == p.build.wine.resolve()
+        return f.is_file() and SHIM_MARK in f.read_text() and str(p.build.wine) in f.read_text()
+    except OSError: return False
+
+def configure_daw_environment(p: Prefix, reporter=None) -> bool:
+    """Make DAWs run yabridge plugins with the app's wine, two ways:
+    1. ~/.local/bin/wine shim — yabridge resolves `wine` through PATH, and
+       ~/.local/bin precedes /usr/bin on Debian/Ubuntu/Mint/Fedora desktops.
+       Effective for every wine started from now on, no re-login, any desktop.
+    2. WINELOADER in systemd user environment.d — for desktops that import it
+       (GNOME); a belt-and-braces for PATHs without ~/.local/bin.
+    Returns True if anything was written."""
     r = null_reporter(reporter)
-    r.step("Configuring DAW environment (WINELOADER)")
-    f = daw_environment_file(); f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(f"WINELOADER={p.build.wine}\nWINEFSYNC=1\n")
-    r.ok(f"{f} (re-login to apply)")
+    r.step("DAWs use this wine (~/.local/bin/wine shim, WINELOADER)")
+    changed = False
+    shim = WINE_SHIM
+    if (shim.exists() or shim.is_symlink()) and not shim_is_ours(p):
+        try: cur = shim.read_text()
+        except OSError: cur = ""
+        if SHIM_MARK not in cur:
+            r.fail(f"{shim} exists and is not this app's — remove it, or point it at {p.build.wine}"); return False
+    if not shim_is_ours(p) or shim.read_text() != shim_content(p):
+        shim.parent.mkdir(parents=True, exist_ok=True)
+        if shim.is_symlink(): shim.unlink()
+        shim.write_text(shim_content(p)); shim.chmod(0o755); changed = True
+    f = daw_environment_file(); want = daw_environment_content(p)
+    if not (f.exists() and f.read_text() == want):
+        f.parent.mkdir(parents=True, exist_ok=True); f.write_text(want); changed = True
+    (r.ok if changed else r.skip)(f"{shim} -> {p.build.wine.name}" if changed else "configured")
+    return changed
+
+def daw_environment_status(p: Prefix) -> tuple[str, str]:
+    """('active' | 'pending' | 'missing', detail).
+    active:  wine started by a DAW is this wine (shim in ~/.local/bin, WINELOADER
+             in this session, or the wine on PATH *is* this wine)
+    pending: only environment.d is written and the session predates it
+    missing: not configured — a DAW would use the host's wine, whose prefix
+             update rewrites the app's prefix with another Wine's DLLs"""
+    want = str(p.build.wine)
+    if shim_is_ours(p): return "active", f"{WINE_SHIM} runs this wine (assumes ~/.local/bin precedes /usr/bin on PATH, the desktop default)"
+    if os.environ.get("WINELOADER") == want: return "active", "WINELOADER is set in this session"
+    host = shutil.which("wine")
+    try:
+        if host and Path(host).resolve() == p.build.wine.resolve(): return "active", "the wine on PATH is this wine"
+    except OSError: pass
+    f = daw_environment_file()
+    if f.exists() and f.read_text() == daw_environment_content(p):
+        return "pending", "WINELOADER configured for the next login (no ~/.local/bin shim); log out and back in, then start your DAW"
+    return "missing", "not configured: a DAW would run plugins with the host's wine and rewrite the prefix"
 
 def bridged(p: Prefix) -> list[dict]:
     """Parsed `yabridgectl status`, limited to plugin dirs inside this prefix

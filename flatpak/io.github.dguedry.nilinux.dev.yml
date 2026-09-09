@@ -17,6 +17,7 @@ finish-args:
   - --socket=pulseaudio             # standalone NI apps
   - --device=dri
   - --allow=devel                   # wine: ptrace/exception handling
+  - --allow=multiarch               # 32-bit programs: NI's InstallAware setup exes are 32-bit; Wine's WoW64 needs the modify_ldt syscall Flatpak otherwise filters
   # yabridge: bridged plugins and its own files must be where host DAWs look
   - --filesystem=~/.vst:create
   - --filesystem=~/.vst3:create
@@ -25,8 +26,10 @@ finish-args:
   - --filesystem=~/.local/bin:create
   - --filesystem=~/.config/yabridgectl:create
   - --filesystem=~/.config/environment.d:create   # "Make DAWs use this wine" (WINELOADER)
-  # installers the user picks come through the file-chooser portal; Downloads is the default location
-  - --filesystem=xdg-download:ro
+  # Installers the user picks come through the file-chooser portal, so no grant on
+  # ~/Downloads is needed. Deliberately NOT granting it: with it, Wine turns the
+  # prefix's Downloads folder into a symlink to the read-only host folder and NI's
+  # daemon has no writable default download location ("Download folder does not exist").
   # wineserver keeps its per-prefix socket/lock under $XDG_RUNTIME_DIR/wine:
   # share it so a host-side yabridge (DAW) and this app use one wineserver for the prefix
   - --filesystem=xdg-run/wine:create

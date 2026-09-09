@@ -128,8 +128,16 @@ def parse_trace(trace: Path) -> tuple[dict[str, str], dict[str, str]]:
             for m in TRACE_RE.finditer(line):
                 props.setdefault(m.group(1), {})[int(m.group(2))] = m.group(3).replace("\\\\", "\\")
     roots, regkeys = {}, {}
+    last_key = ""
     for bag, v in props.items():
-        if v.get(2) == "REGISTRY KEYS" and 3 in v and 4 in v and not v[3].startswith("HKCU"): regkeys[v[3]] = v[4]
+        if v.get(2) == "REGISTRY KEYS" and 3 in v and 4 in v and not v[3].startswith("HKCU"):
+            name = v[3]
+            # a bare value name (e.g. 'ContentVersion') belongs to the product key that
+            # the previous REGISTRY KEYS entry addressed (SOFTWARE\Native Instruments\<Product>)
+            if "\\" not in name:
+                if not last_key: continue
+                name = last_key + "\\" + name
+            regkeys[name] = v[4]; last_key = name.rpartition("\\")[0]
         dest = v.get(1, "")
         if dest[:3].upper() == "C:\\" and not any(x in dest for x in SKIP_ROOTS):
             roots[bag + "_1"] = dest.rstrip("\\")
@@ -172,9 +180,13 @@ def install_app(p: Prefix, setup: Path, reporter=None, keep_trace=False) -> dict
         r.ok(msis[0].name)
         n = deploy_payload(p, msis[0], bag / "data", roots, r)
         r.step("Writing registry keys")
+        vals = {}
         for k, v in regkeys.items():
-            key, val = _split_key(k); p.reg_add("HKLM\\" + key, val, v)
-        r.ok(f"{len(regkeys)} value(s)")
+            key, val = _split_key(k)
+            if not key: r.log(f"skipping registry entry without a key: {k}"); continue
+            vals.setdefault("HKLM\\" + key, {})[val] = ("REG_SZ", v)
+        if vals: p.reg_import_values(vals, "nilinux-app-install.reg")
+        r.ok(f"{sum(len(x) for x in vals.values())} value(s)")
         if not keep_trace: trace.unlink(missing_ok=True)
         return {"name": name, "method": "deploy", "files": n, "regkeys": regkeys}
     finally:

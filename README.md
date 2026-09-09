@@ -75,6 +75,17 @@ the prefix, logs. Nothing is installed system-wide.
   - *Add a plugin folder* / *Bridge plugins now*.
 - **Health** — every fix and prerequisite with a repair hint. The menu has
   *Re-run setup / repair* and *Make DAWs use this wine*.
+
+**DAWs must run plugins with the app's wine.** Setup installs a small
+`~/.local/bin/wine` shim that execs the app's wine (with `WINEFSYNC=1`), and
+writes `~/.config/environment.d/50-nilinux.conf` (`WINELOADER`) for desktops that
+import it. yabridge resolves `wine` through PATH, and `~/.local/bin` precedes
+`/usr/bin` on Debian, Ubuntu, Mint and Fedora desktops, so the shim takes effect
+for every wine started afterwards, with no re-login. Until one of these is
+active the app does not bridge plugins, and Health and the Plugins tab say so: a
+DAW using the host's own wine would run *its* prefix update on the app's prefix
+and replace the DLLs with another version's. If you already have your own
+`~/.local/bin/wine`, setup leaves it alone and tells you.
 - **Progress** — step list, download bar and log for long tasks.
 
 Bridged plugins land in `~/.vst/yabridge`, `~/.vst3/yabridge`,
@@ -112,7 +123,10 @@ Each of these was diagnosed from a real failure.
 | NI app installers fail ("Setup has failed: FALSE") | InstallAware queries an MSI virtual table Wine's SQL parser rejects | Runs the installer silently under an MSI trace; if it fails, deploys the payload from the trace's destination map and writes the registry keys |
 | Library installed but invisible in Kontakt | Daemon skipped the HKLM key Kontakt scans | Writes `ContentDir`/`HU`/`JDX` from the daemon's record and NI's catalogue |
 | NI apps freeze each other | Boost named mutexes are not crash-safe | Clears stale mutex files when no NI app runs |
-| Plugins refuse to load in a DAW ("prefix updated by a newer Wine") | Host wine older than the prefix's wine | One wine binary for both; *Make DAWs use this wine* sets `WINELOADER` |
+| Every NI application install fails instantly in the Flatpak (daemon error 731; any 32-bit program: "Application could not be started") | Flatpak's seccomp filter blocks `modify_ldt`, which Wine's WoW64 layer needs for 32-bit code; NI's InstallAware setup exes are 32-bit | Manifest grants `--allow=multiarch`; Health checks that a 32-bit program runs |
+| Every download fails ("Download folder does not exist", "could not create new file") | A fresh prefix has no download location; Wine's `Downloads` folder is a symlink to the host's, which the sandbox mounts read-only | Points NA at `C:\users\Public\Downloads` inside the prefix whenever the configured location is unset or not writable (checked at setup and on every launch; a working custom location is kept) |
+| Plugins refuse to load in a DAW ("prefix updated by a newer Wine") | Host wine older than the prefix's wine | One wine binary for both: setup installs a `~/.local/bin/wine` shim (and `WINELOADER` via environment.d); plugins are not bridged until one is active |
+| After a DAW session, NI installers die instantly ("Cannot create temporary folder" style dialogs, daemon error 731) | A DAW's yabridge ran the *host* wine on the prefix, whose prefix update replaced the built-in DLLs with another version's | Health compares built-in DLLs with the app's wine; setup re-runs the prefix update with the right wine (native C runtime files are kept) |
 
 The `app.asar` patches recompute the archive's per-file integrity and the
 header hash stored in the exe (NA ships with Electron's asar-integrity fuse
@@ -145,10 +159,14 @@ working tree in Flathub's GNOME 50 container; the built bundle
 
 **Flatpak notes.** Wine is downloaded at first run rather than bundled;
 Native Access is neither bundled nor downloaded. Permissions: network,
-X11/Wayland/PulseAudio, DRI, `--allow=devel` (wine), `--filesystem=home`
-(yabridge dirs, installers) and `xdg-run/wine`
-(share the prefix's wineserver with a host-side yabridge, which works because
-both run the identical wine binary). `yabridgectl` runs with the host's
+X11/PulseAudio, DRI, `--allow=devel` (wine), `--allow=multiarch` (32-bit
+installers), the yabridge directories under
+`~` and `xdg-run/wine` (share the prefix's wineserver with a host-side
+yabridge, which works because both run the identical wine binary). Installers
+arrive through the file-chooser portal, so the app has no grant on
+`~/Downloads`: granting it would make Wine symlink the prefix's Downloads
+folder to the read-only host folder, and NI's daemon would have no writable
+default download location. `yabridgectl` runs with the host's
 `XDG_CONFIG_HOME`/`XDG_DATA_HOME` because the sandbox remaps them. The app id
 `io.github.dguedry.nilinux` is a placeholder; Flathub needs an id under a domain
 or GitHub account you control, changed consistently in the manifest, desktop

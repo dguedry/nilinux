@@ -129,13 +129,15 @@ class Window(Adw.ApplicationWindow):
 
     # ---- plugins page ------------------------------------------------------------------
     def build_plugins(self):
-        page = Adw.PreferencesPage()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.daw_banner = Adw.Banner(revealed=False); box.append(self.daw_banner)
+        page = Adw.PreferencesPage(vexpand=True); box.append(page)
         self.products_group = Adw.PreferencesGroup(title="Installed products", description="From Native Access. Libraries are registered for Kontakt automatically.")
         page.add(self.products_group)
         self.bridged_group = Adw.PreferencesGroup(title="Bridged plugins", description="Available to Linux DAWs through yabridge (~/.vst, ~/.vst3, ~/.clap).")
         page.add(self.bridged_group)
         self._rows = {self.products_group: [], self.bridged_group: []}
-        return page
+        return box
     def _fill(self, group, rows):
         for r in self._rows[group]: group.remove(r)
         self._rows[group] = []
@@ -144,7 +146,11 @@ class Window(Adw.ApplicationWindow):
         if not self.is_ready(): return
         def work():
             prods = products.installed(self.prefix); bridged = yabridge.bridged(self.prefix)
+            daw_state, daw_detail = yabridge.daw_environment_status(self.prefix)
             def show():
+                if daw_state == "pending": self.daw_banner.set_title("Log out and back in, then start your DAW: it must run plugins with this app's wine. Plugins are not bridged until then.")
+                elif daw_state == "missing": self.daw_banner.set_title("DAWs would run plugins with the host's wine and damage the prefix — run Re-run setup / repair. Plugins are not bridged until then.")
+                self.daw_banner.set_revealed(daw_state != "active")
                 rows = []
                 for p in prods:
                     row = Adw.ActionRow(title=GLib.markup_escape_text(p.name), subtitle=GLib.markup_escape_text(f"{p.type or '?'} {p.version}".strip()))

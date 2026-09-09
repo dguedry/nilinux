@@ -173,6 +173,36 @@ class Prefix:
             except OSError: pass
         time.sleep(wait)
 
+    # -- integrity -------------------------------------------------------------------
+    # Builtin DLLs whose prefix copies must come from *this* wine. Another Wine
+    # (a DAW's yabridge using the host wine) touching the prefix runs its own
+    # prefix update and replaces them; mixed DLLs break 32-bit programs among
+    # other things (NI installers fail at once with "Cannot create ..." dialogs).
+    PROBE_DLLS = (("syswow64", "i386-windows", "comctl32.dll"), ("system32", "x86_64-windows", "comctl32.dll"),
+                  ("syswow64", "i386-windows", "user32.dll"), ("system32", "x86_64-windows", "ntdll.dll"))
+
+    def foreign_dlls(self) -> list[str]:
+        """Prefix builtin DLLs that differ in size from this wine build's copies."""
+        bad = []
+        for sysdir, pedir, dll in self.PROBE_DLLS:
+            ours = self.build.root / "lib/wine" / pedir / dll; mine = self.drive_c / "windows" / sysdir / dll
+            if ours.exists() and mine.exists() and ours.stat().st_size != mine.stat().st_size: bad.append(f"{sysdir}/{dll}")
+        return bad
+
+    def refresh_builtins(self, reporter=None) -> bool:
+        """Re-run this wine's prefix update so builtin DLLs match it again. Native
+        DLLs installed by the app (ucrtbase, VC runtime) are not fake DLLs and are
+        left alone by wineboot. Returns True if a refresh was needed."""
+        r = null_reporter(reporter)
+        r.step("Prefix files match this wine")
+        bad = self.foreign_dlls()
+        if not bad: r.skip(); return False
+        (self.path / ".update-timestamp").unlink(missing_ok=True)
+        self.run(["wineboot", "-u"], timeout=900)
+        still = self.foreign_dlls()
+        (r.fail if still else r.ok)(f"refreshed ({', '.join(bad)} were from another Wine)" if not still else f"still foreign: {still}")
+        return True
+
     # -- paths ---------------------------------------------------------------------
     @property
     def user_dir(self) -> Path:
@@ -186,9 +216,14 @@ class Prefix:
     @property
     def public_docs(self) -> Path: return self.drive_c / "users" / "Public" / "Documents"
     def to_host(self, winpath: str) -> Path:
+        """Windows path -> host path. C: is drive_c; other letters go through
+        dosdevices (Z: is / by default), so Z:\\home\\me maps to /home/me."""
         p = winpath.replace("\\", "/")
-        p = re.sub(r"^[Cc]:/?", "", p)
-        return self.drive_c / p
+        m = re.match(r"^([A-Za-z]):/?(.*)$", p)
+        if not m: return self.drive_c / p.lstrip("/")
+        drive, rest = m.group(1).lower(), m.group(2)
+        root = self.drive_c if drive == "c" else self.path / "dosdevices" / f"{drive}:"
+        return root / rest
     def to_win(self, host: Path) -> str:
         rel = Path(host).resolve().relative_to(self.drive_c.resolve())
         return "C:\\" + str(rel).replace("/", "\\")
