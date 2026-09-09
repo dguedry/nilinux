@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.1" date="2026-09-09">
+      <description>
+        <p>Flatpak fixes: a writable default download location for Native Access, 32-bit NI installers run (multiarch), the prefix is repaired if another Wine rewrote it, and DAWs are made to run bridged plugins with the app's own Wine. Trace parser fix for application installs.</p>
+      </description>
+    </release>
     <release version="0.1.0" date="2026-09-07">
       <description>
         <p>First release: own Wine environment with every Native Access fix, install of NI applications whose installers fail under Wine, third-party plugin installers, yabridge bridging, GTK4 GUI and CLI.</p>
