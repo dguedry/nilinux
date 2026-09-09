@@ -160,9 +160,11 @@ working tree in Flathub's GNOME 50 container; the built bundle
 **Flatpak notes.** Wine is downloaded at first run rather than bundled;
 Native Access is neither bundled nor downloaded. Permissions: network,
 X11/PulseAudio, DRI, `--allow=devel` (wine), `--allow=multiarch` (32-bit
-installers), the yabridge directories under
-`~` and `xdg-run/wine` (share the prefix's wineserver with a host-side
-yabridge, which works because both run the identical wine binary). Installers
+installers), the yabridge directories under `~`, and `/tmp` plus `xdg-run/wine`
+(share the prefix's wineserver socket with a host-side yabridge so a DAW's
+plugins and the app's NTK daemon use one wineserver: this wine puts the socket
+under `/tmp/.wine-<uid>` when `/tmp` is real, and the sandbox's private `/tmp`
+would otherwise split the two). Installers
 arrive through the file-chooser portal, so the app has no grant on
 `~/Downloads`: granting it would make Wine symlink the prefix's Downloads
 folder to the read-only host folder, and NI's daemon would have no writable

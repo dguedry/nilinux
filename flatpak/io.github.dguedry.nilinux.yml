@@ -30,8 +30,18 @@ finish-args:
   # ~/Downloads is needed. Deliberately NOT granting it: with it, Wine turns the
   # prefix's Downloads folder into a symlink to the read-only host folder and NI's
   # daemon has no writable default download location ("Download folder does not exist").
-  # wineserver keeps its per-prefix socket/lock under $XDG_RUNTIME_DIR/wine:
-  # share it so a host-side yabridge (DAW) and this app use one wineserver for the prefix
+  # wineserver's per-prefix socket must be the SAME file the host's wine sees, so
+  # a DAW's yabridge (host) and this app's daemon (sandbox) share ONE wineserver
+  # for the prefix. This wine build puts that socket under /tmp/.wine-<uid> when
+  # /tmp is a real shared mount, and only falls back to $XDG_RUNTIME_DIR/wine when
+  # /tmp is the sandbox's private tmpfs. The host always uses /tmp/.wine-<uid>, so
+  # we must share the real /tmp; sharing only xdg-run/wine splits them (the
+  # sandbox lands in XDG_RUNTIME_DIR, the host in /tmp — plugins hang with no
+  # daemon in their wineserver). Keep xdg-run/wine too for older wine builds.
+  # (--filesystem=/tmp trips Flathub's finish-args-host-tmp-access lint, which is
+  # on Flathub's documented exceptions list — request the exception at submission.
+  # A narrower /tmp/.wine-<uid> can't be expressed without hardcoding the uid.)
+  - --filesystem=/tmp
   - --filesystem=xdg-run/wine:create
   - --env=WINEDLLOVERRIDES=winemenubuilder.exe=d;mscoree=d;mshtml=d
 cleanup:
