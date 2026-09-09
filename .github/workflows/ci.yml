@@ -16,14 +16,14 @@ jobs:
   # does NOT start a second run (GitHub's loop-prevention), so we do not rely on
   # the tag re-triggering CI; the release job keys off this job's output instead.
   #
-  # Skips: an explicit "[skip release]" in the message, and the bot's own bump
-  # commit (whose message carries [skip release]) — so no release-of-a-release loop.
+  # Skips: an explicit "[no-release]" in the message, and the bot's own bump
+  # commit (whose message carries [no-release]) — so no release-of-a-release loop.
   auto-tag:
     name: Auto-tag next patch (push to main)
     if: >-
       github.event_name == 'push'
       && github.ref == 'refs/heads/main'
-      && !contains(github.event.head_commit.message, '[skip release]')
+      && !contains(github.event.head_commit.message, '[no-release]')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -56,7 +56,7 @@ jobs:
 
           $NOTE
 
-          Auto-released on push to main. [skip release]"
+          Auto-released on push to main. [no-release]"
           git tag -a "v$VERSION" -m "nilinux $VERSION"
           git push origin HEAD:main
           git push origin "v$VERSION"

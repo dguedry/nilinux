@@ -163,7 +163,7 @@ working tree in Flathub's GNOME 50 container; the built bundle
 and the same run builds `nilinux.flatpak` and attaches it to a GitHub release.
 The `releases/latest` download link then serves it, no manual step. So write a
 clear commit subject — it becomes the changelog. To push *without* releasing
-(docs, WIP), put `[skip release]` in the commit message. The bot's own bump
+(docs, WIP), put `[no-release]` in the commit message. The bot's own bump
 commit carries that marker, so there is no release-of-a-release loop.
 
 **Releasing — manual.** To choose the version and notes yourself (e.g. a minor
