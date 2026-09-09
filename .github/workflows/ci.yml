@@ -7,13 +7,78 @@ on:
   pull_request:
 
 jobs:
+  # On a push to main, cut the next patch release in this same run: bump the
+  # version + add a metainfo entry (from the commit subject), commit and push it
+  # to main, tag it, and hand the version to the release job below. The build
+  # jobs then check out that bump commit and the release job publishes the bundle.
+  #
+  # Everything is one workflow run — pushing the tag with the default GITHUB_TOKEN
+  # does NOT start a second run (GitHub's loop-prevention), so we do not rely on
+  # the tag re-triggering CI; the release job keys off this job's output instead.
+  #
+  # Skips: an explicit "[skip release]" in the message, and the bot's own bump
+  # commit (whose message carries [skip release]) — so no release-of-a-release loop.
+  auto-tag:
+    name: Auto-tag next patch (push to main)
+    if: >-
+      github.event_name == 'push'
+      && github.ref == 'refs/heads/main'
+      && !contains(github.event.head_commit.message, '[skip release]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.cut.outputs.version }}
+      sha: ${{ steps.cut.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - id: cut
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          VERSION="$(python3 scripts/bump.py --next-patch)"
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "tag v$VERSION already exists; skipping"; exit 0
+          fi
+
+          NOTE="$(git log -1 --pretty=%s)"     # changelog = the push's commit subject
+          python3 scripts/bump.py "$VERSION" "$NOTE"
+
+          git add nilinux/__init__.py pyproject.toml data/io.github.dguedry.nilinux.metainfo.xml
+          git commit -m "Release $VERSION
+
+          $NOTE
+
+          Auto-released on push to main. [skip release]"
+          git tag -a "v$VERSION" -m "nilinux $VERSION"
+          git push origin HEAD:main
+          git push origin "v$VERSION"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "released v$VERSION"
+
+  # The build/test jobs always run (push, PR, tag). On the auto-tag path they wait
+  # for auto-tag and check out its bump commit so the built bundle carries the new
+  # version; otherwise they build whatever ref triggered them.
   lint:
     name: Flathub linter (manifest, metainfo)
+    needs: [auto-tag]
+    if: always() && (needs.auto-tag.result == 'success' || needs.auto-tag.result == 'skipped')
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/flathub/flatpak-builder-lint:latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.auto-tag.outputs.sha || github.sha }}
       - name: Lint manifest
         # --exceptions + our appid-keyed file waive only finish-args-host-tmp-access
         # (the shared /tmp wineserver socket; see flatpak/lint-exceptions.json and the
@@ -28,9 +93,13 @@ jobs:
 
   python:
     name: Python syntax and imports
+    needs: [auto-tag]
+    if: always() && (needs.auto-tag.result == 'success' || needs.auto-tag.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.auto-tag.outputs.sha || github.sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -42,12 +111,16 @@ jobs:
 
   flatpak:
     name: Flatpak build (working tree)
+    needs: [auto-tag]
+    if: always() && (needs.auto-tag.result == 'success' || needs.auto-tag.result == 'skipped')
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-50
       options: --privileged
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.auto-tag.outputs.sha || github.sha }}
       - name: Generate working-tree manifest
         run: python3 flatpak/dev-manifest.py
       - uses: flathub-infra/flatpak-github-actions/flatpak-builder@933e9e8ca36e85046ebca8e211f0785c6becac40
@@ -62,10 +135,18 @@ jobs:
           path: nilinux.flatpak
           if-no-files-found: error
 
+  # Publish the bundle to a GitHub release when either: (a) a v* tag was pushed
+  # directly (manual scripts/release.sh path), or (b) the auto-tag job cut a new
+  # version in this run.
   release:
     name: Publish bundle to the GitHub release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [lint, python, flatpak]
+    needs: [auto-tag, lint, python, flatpak]
+    if: >-
+      always()
+      && needs.lint.result == 'success'
+      && needs.python.result == 'success'
+      && needs.flatpak.result == 'success'
+      && (startsWith(github.ref, 'refs/tags/v') || needs.auto-tag.outputs.version != '')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -77,7 +158,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
+          set -euo pipefail
+          if [ -n "${{ needs.auto-tag.outputs.version }}" ]; then
+            TAG="v${{ needs.auto-tag.outputs.version }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
             gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "nilinux $TAG" --generate-notes
           gh release upload "$TAG" nilinux.flatpak --repo "$GITHUB_REPOSITORY" --clobber
+          echo "published $TAG"

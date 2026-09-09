@@ -45,31 +45,8 @@ grep -q "version=\"$VERSION\"" "$METAINFO" && die "$METAINFO already has a $VERS
 CUR="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' "$INIT")"
 echo "release: $CUR -> $VERSION"
 
-# --- edits -------------------------------------------------------------------
-python3 - "$VERSION" "$NOTE" "$INIT" "$PYPROJECT" "$METAINFO" <<'PY'
-import sys, datetime, re
-ver, note, init, pyproject, metainfo = sys.argv[1:6]
-
-def sub_one(path, pattern, repl):
-    s = open(path).read()
-    s2, n = re.subn(pattern, repl, s, count=1)
-    if n != 1: sys.exit(f"release: could not update {path} (pattern not found once)")
-    open(path, "w").write(s2)
-
-sub_one(init, r'__version__ = "[^"]*"', f'__version__ = "{ver}"')
-sub_one(pyproject, r'(?m)^version = "[^"]*"', f'version = "{ver}"')
-
-# insert a new <release> as the first child of <releases>
-today = datetime.date.today().isoformat()
-from xml.sax.saxutils import escape
-entry = (f'    <release version="{ver}" date="{today}">\n'
-         f'      <description>\n'
-         f'        <p>{escape(note)}</p>\n'
-         f'      </description>\n'
-         f'    </release>\n')
-sub_one(metainfo, r'(<releases>\n)', r'\1' + entry.replace('\\', '\\\\'))
-print("edited", init, pyproject, metainfo)
-PY
+# --- edits (shared with the auto-tag CI job) -----------------------------------
+python3 "$ROOT/scripts/bump.py" "$VERSION" "$NOTE"
 
 # --- validate the metainfo ---------------------------------------------------
 if command -v flatpak >/dev/null && flatpak info org.flatpak.Builder >/dev/null 2>&1; then
