@@ -157,6 +157,22 @@ and metainfo, a Python syntax/import check, and a full Flatpak build of the
 working tree in Flathub's GNOME 50 container; the built bundle
 (`nilinux.flatpak`) is attached to the run as an artifact.
 
+**Releasing.** A push to `main` only produces a CI artifact. To publish a
+downloadable bundle — the file the *Download* link above serves — cut a
+tagged release:
+
+```
+scripts/release.sh 0.1.2 "one-line changelog"
+```
+
+That bumps the version (package, `pyproject.toml`, and a new `<release>` entry
+in the metainfo), lints the metainfo, commits, tags `v0.1.2`, and pushes. CI on
+the tag builds `nilinux.flatpak` and attaches it to a GitHub release; the
+`releases/latest` download link then serves it, no README edit needed. Add
+`--dry-run` to preview the edits without committing. Flathub is separate: after
+a release, re-pin the manifest's `tag`/`commit` to the new version and refresh
+your Flathub fork branch by hand.
+
 **Flatpak notes.** Wine is downloaded at first run rather than bundled;
 Native Access is neither bundled nor downloaded. Permissions: network,
 X11/PulseAudio, DRI, `--allow=devel` (wine), `--allow=multiarch` (32-bit
