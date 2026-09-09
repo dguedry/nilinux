@@ -15,7 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Lint manifest
-        run: flatpak-builder-lint manifest flatpak/io.github.dguedry.nilinux.yml
+        # --exceptions + our appid-keyed file waive only finish-args-host-tmp-access
+        # (the shared /tmp wineserver socket; see flatpak/lint-exceptions.json and the
+        # manifest comment). Every other finding still fails the job. This waiver must
+        # also be requested when submitting to Flathub.
+        run: >-
+          flatpak-builder-lint --exceptions
+          --user-exceptions flatpak/lint-exceptions.json
+          manifest flatpak/io.github.dguedry.nilinux.yml
       - name: Lint metainfo
         run: flatpak-builder-lint appstream data/io.github.dguedry.nilinux.metainfo.xml
 
