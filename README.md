@@ -93,7 +93,43 @@ Bridged plugins land in `~/.vst/yabridge`, `~/.vst3/yabridge`,
 
 CLI equivalents: `setup`, `install-na <file>`, `launch [--wait]`,
 `products`, `register`, `install <installer> [--third-party]`, `sync
-[dirs…] [--daw-env]`, `doctor`, `status`.
+[dirs…] [--daw-env]`, `doctor`, `status`, `prefixes`, `finish-installs`.
+
+## One prefix, many DAWs
+
+Every DAW (and any other host, such as a plugin scanner) must see one and the
+same prefix, because NI's NTK daemon binds fixed localhost ports and there can
+be only one per machine. A plugin bridged from prefix A while prefix B's daemon
+holds the ports talks to the wrong daemon and hangs in every host. Several
+nilinux prefixes appear easily: the source install (`~/.local/share/nilinux`),
+the Flatpak (`~/.var/app/<id>/data/nilinux`), an older Flatpak app id.
+
+The rule is simple: **the nilinux you run owns the bridges.** `sync` registers
+this prefix's plugin directories with yabridgectl and removes those of other
+nilinux prefixes (third-party prefixes you added yourself are left alone).
+Health reports:
+
+- *NTK Daemon ports free or ours* — names the prefix whose daemon actually
+  holds the ports (read from the listener's `WINEPREFIX`), not a guess;
+- *single nilinux prefix* — lists other nilinux prefixes on the machine;
+- *yabridge lists only this prefix*, *bridged plugins point at existing files*.
+
+`nilinux prefixes` prints the same overview on the command line. After
+switching prefixes, rescan plugins in your DAW: its plugin list still holds
+the old entries until then.
+
+## Interrupted installs
+
+Native Access runs NI's InstallAware setups itself. Under Wine one can remove
+the previous version's files and then die before writing the new ones, which
+leaves the plugin missing and the extracted installer (stub exe, inner MSI and
+the FileBag) in the user's Temp folder. The app finishes such installs
+automatically when Native Access exits, and *Finish interrupted installs* /
+`nilinux finish-installs` does it on demand: it re-runs the installer NA
+downloaded through the normal install path (with the deploy fallback), or, if
+the download is gone, runs the staged stub under an MSI trace and deploys the
+staged payload. Health lists what is pending under *no interrupted Native
+Access installs*.
 
 ## Native Access updates
 
@@ -126,6 +162,8 @@ Each of these was diagnosed from a real failure.
 | Every NI application install fails instantly in the Flatpak (daemon error 731; any 32-bit program: "Application could not be started") | Flatpak's seccomp filter blocks `modify_ldt`, which Wine's WoW64 layer needs for 32-bit code; NI's InstallAware setup exes are 32-bit | Manifest grants `--allow=multiarch`; Health checks that a 32-bit program runs |
 | Every download fails ("Download folder does not exist", "could not create new file") | A fresh prefix has no download location; Wine's `Downloads` folder is a symlink to the host's, which the sandbox mounts read-only | Points NA at `C:\users\Public\Downloads` inside the prefix whenever the configured location is unset or not writable (checked at setup and on every launch; a working custom location is kept) |
 | Plugins refuse to load in a DAW ("prefix updated by a newer Wine") | Host wine older than the prefix's wine | One wine binary for both: setup installs a `~/.local/bin/wine` shim (and `WINELOADER` via environment.d); plugins are not bridged until one is active |
+| Plugins hang in every DAW; Health shows the NTK ports held by another prefix | Two nilinux prefixes (Flatpak and source install, or an old app id) both bridged; the daemon that owns the ports belongs to the other one | `sync` unregisters other nilinux prefixes' directories; Health names the daemon's prefix from the listener's `WINEPREFIX`; `nilinux prefixes` shows the whole picture |
+| A plugin vanished after Native Access updated it; the bridge link points at a missing file | NA's InstallAware update removed the old files and died before deploying the new ones | Finishes the install from the staged payload / kept download after NA exits, or via *Finish interrupted installs* |
 | After a DAW session, NI installers die instantly ("Cannot create temporary folder" style dialogs, daemon error 731) | A DAW's yabridge ran the *host* wine on the prefix, whose prefix update replaced the built-in DLLs with another version's | Health compares built-in DLLs with the app's wine; setup re-runs the prefix update with the right wine (native C runtime files are kept) |
 
 The `app.asar` patches recompute the archive's per-file integrity and the

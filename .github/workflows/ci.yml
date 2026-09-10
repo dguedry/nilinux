@@ -110,6 +110,7 @@ jobs:
       - name: Import every non-GUI module
         run: python -c "import nilinux, nilinux.cli, nilinux.doctor, nilinux.products, nilinux.native_access, nilinux.yabridge, nilinux.wine, nilinux.msi, nilinux.download, nilinux.progress, nilinux.paths"
       - run: python -m nilinux --help
+      - run: python -m unittest discover -s tests -v
 
   flatpak:
     name: Flatpak build (working tree)

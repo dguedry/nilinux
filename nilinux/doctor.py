@@ -2,7 +2,7 @@
 import shutil, subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from . import paths, wine, native_access as na, yabridge, products
+from . import paths, wine, native_access as na, yabridge, products, prefixes
 
 @dataclass
 class Check:
@@ -55,20 +55,40 @@ def run(p: wine.Prefix | None = None) -> list[Check]:
                            + ("(validated)" if v["latest_known_good"] else "(not yet validated on this stack)")))
         if s["pending_update"]:
             c.append(Check("no pending legacy self-update", False, "apply with: nilinux update, or ignore", fix="nilinux update"))
-    # the NTK daemon binds fixed localhost ports; a daemon from another prefix
-    # (any other Wine prefix running Native Access) blocks ours with "Address in use"
-    import socket
-    busy = []
-    for port in na.NTK_PORTS:
-        with socket.socket() as sk:
-            try: sk.bind(("127.0.0.1", port))
-            except OSError: busy.append(port)
-    # a daemon we cannot see as a process (another Flatpak instance of this app)
-    # still counts as ours when this prefix's wineserver is up
-    ours = p.is_running("NTKDaemon.exe") or (bool(busy) and p.wineserver_running())
-    c.append(Check("NTK Daemon ports free or ours", ours or not busy,
-                   "daemon running" if ours else (f"ports {busy} held by another process (another prefix's daemon?)" if busy else "daemon not running (starts with Native Access)"),
-                   fix="stop the other Native Access / NTKDaemon, then nilinux launch"))
+    # The NTK daemon binds fixed localhost ports, one daemon per machine. A daemon
+    # from another prefix holding them means plugins bridged from *this* prefix talk
+    # to the wrong daemon and hang in every DAW; a wineserver of ours being up is no
+    # proof the daemon is ours, so look at the listener's WINEPREFIX.
+    owner = prefixes.ntk_port_owner(na.NTK_PORTS)
+    if not owner["busy"]:
+        c.append(Check("NTK Daemon ports free or ours", True, "daemon not running (starts with Native Access or the first plugin)"))
+    elif owner["prefix"] and Path(owner["prefix"]).resolve() == p.path.resolve():
+        c.append(Check("NTK Daemon ports free or ours", True, f"{owner['exe'] or 'daemon'} running in this prefix"))
+    elif owner["prefix"]:
+        c.append(Check("NTK Daemon ports free or ours", False,
+                       f"ports {owner['busy']} held by {owner['exe']} (pid {owner['pid']}) of another prefix: {prefixes.short(owner['prefix'])} -- plugins bridged from this prefix will hang",
+                       fix="quit Native Access / the DAW using that prefix, or run that prefix's nilinux instead"))
+    else:
+        ours = p.is_running("NTKDaemon.exe") or p.wineserver_running()
+        c.append(Check("NTK Daemon ports free or ours", ours,
+                       "daemon running (holder not visible from this sandbox)" if ours else f"ports {owner['busy']} held by a process this sandbox cannot see (another prefix's daemon?)",
+                       fix="stop the other Native Access / NTKDaemon, then nilinux launch"))
+    others = prefixes.other_prefixes(p)
+    c.append(Check("single nilinux prefix", not others,
+                   "" if not others else "also: " + ", ".join(prefixes.short(o) for o in others) + " -- only one can own the NI daemon; sync keeps the bridges on this one",
+                   fix="delete the other prefix folders once you are sure this one is the install to keep"))
+    ystat = yabridge.status(p)
+    foreign = prefixes.foreign_yabridge_dirs(p, ystat)
+    c.append(Check("yabridge lists only this prefix", not foreign,
+                   "" if not foreign else f"{len(foreign)} plugin directories of other nilinux prefixes are registered", fix="nilinux sync"))
+    broken = yabridge.broken_bundles()
+    c.append(Check("bridged plugins point at existing files", not broken,
+                   "" if not broken else "missing target for: " + ", ".join(b.name for b in broken) + " (uninstalled, or an update that did not finish)",
+                   fix="nilinux finish-installs, then nilinux sync"))
+    staged = products.staged_installs(p)
+    c.append(Check("no interrupted Native Access installs", not staged,
+                   "" if not staged else "left half-done: " + ", ".join(f"{x.name}" + (" (download kept)" if x.download else "") for x in staged),
+                   fix="nilinux finish-installs"))
     # Wine's audio driver speaks the PulseAudio protocol; PipeWire serves that
     # socket too. Without it, standalone NI apps are silent (DAW use is unaffected).
     import os

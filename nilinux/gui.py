@@ -186,6 +186,8 @@ class Window(Adw.ApplicationWindow):
         r.add_suffix(Gtk.Image(icon_name="folder-open-symbolic")); r.connect("activated", lambda *_: self.pick_folder()); g.add(r)
         r = Adw.ActionRow(title="Bridge plugins now", subtitle="Re-scan the prefix and update the DAW-visible plugins.", activatable=True)
         r.add_suffix(Gtk.Image(icon_name="view-refresh-symbolic")); r.connect("activated", lambda *_: self.sync()); g.add(r)
+        r = Adw.ActionRow(title="Finish interrupted installs", subtitle="Complete an NI install that Native Access started but did not finish (Health lists them).", activatable=True)
+        r.add_suffix(Gtk.Image(icon_name="emblem-synchronizing-symbolic")); r.connect("activated", lambda *_: self.finish_installs()); g.add(r)
         page.add(g)
         return page
     def open_na(self):
@@ -202,7 +204,7 @@ class Window(Adw.ApplicationWindow):
             # NA's parent wine process exits when the app closes; then do the invisible
             # bookkeeping — on the main loop, never touch GTK from this thread
             ui(lambda: self.run_bg("Finishing up after Native Access",
-                                   lambda r: (products.register_all_libraries(self.prefix, r), yabridge.sync(self.prefix, r))))
+                                   lambda r: (products.finish_staged_installs(self.prefix, r), products.register_all_libraries(self.prefix, r), yabridge.sync(self.prefix, r))))
         threading.Thread(target=watch, daemon=True).start()
     def pick_file(self, title, cb, downloads=False):
         d = Gtk.FileDialog(title=title)
@@ -229,6 +231,12 @@ class Window(Adw.ApplicationWindow):
             products.run_installer(self.prefix, path, r); return yabridge.sync(self.prefix, r)
         self.run_bg(f"Installing {path.name}", fn)
     def sync(self): self.run_bg("Bridging plugins", lambda r: yabridge.sync(self.prefix, r))
+    def finish_installs(self):
+        def fn(r):
+            res = products.finish_staged_installs(self.prefix, r)
+            if not res: r.step("Interrupted installs"); r.skip("none found")
+            yabridge.sync(self.prefix, r); return res
+        self.run_bg("Finishing interrupted installs", fn)
     # ---- health page --------------------------------------------------------------------
     def build_health(self):
         page = Adw.PreferencesPage()

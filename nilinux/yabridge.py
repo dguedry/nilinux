@@ -104,6 +104,21 @@ def sync(p: Prefix, reporter=None, extras=()) -> dict:
     for d in dirs:
         subprocess.run([str(YCTL), "add", str(d)], capture_output=True, env=env)
     r.ok(f"{len(dirs)} directories")
+    # The nilinux that runs owns the bridges. Directories of *other* nilinux prefixes
+    # (the Flatpak vs the source install, an old app id) would make same-named plugins
+    # link into a prefix whose NTK daemon is not the one running -- and hang in every
+    # DAW. Third-party prefixes the user registered themselves are left alone.
+    from . import prefixes
+    foreign = prefixes.foreign_yabridge_dirs(p, status(p))
+    removed = []
+    if foreign:
+        r.step("Unregistering other nilinux prefixes' plugin directories")
+        for d in foreign:
+            cp0 = subprocess.run([str(YCTL), "rm", d], capture_output=True, text=True, env=env)
+            if cp0.returncode == 0: removed.append(d)
+            else: r.log(f"could not remove {d}: {(cp0.stderr or cp0.stdout).strip()[:100]}")
+        owners = sorted({prefixes.short(prefixes.prefix_of_dir(d)) for d in removed if prefixes.prefix_of_dir(d)})
+        r.ok(f"{len(removed)} from {', '.join(owners)}" if removed else "nothing removed")
     r.step("Syncing yabridge")
     cp = subprocess.run([str(YCTL), "sync", "--prune"], capture_output=True, text=True, env=env, timeout=1800)
     summary = next((l for l in cp.stdout.splitlines() if l.startswith("Finished")), "")
@@ -111,7 +126,7 @@ def sync(p: Prefix, reporter=None, extras=()) -> dict:
     (r.ok if cp.returncode == 0 else r.fail)(summary)
     for l in cp.stdout.splitlines():
         if l.startswith("WARNING"): r.log(l)
-    return {"dirs": [str(d) for d in dirs], "returncode": cp.returncode, "output": cp.stdout, "summary": summary}
+    return {"dirs": [str(d) for d in dirs], "removed_dirs": removed, "returncode": cp.returncode, "output": cp.stdout, "summary": summary}
 
 def status(p: Prefix) -> str:
     if not YCTL.exists(): return "yabridge not installed"
@@ -181,6 +196,18 @@ def daw_environment_status(p: Prefix) -> tuple[str, str]:
     if f.exists() and f.read_text() == daw_environment_content(p):
         return "pending", "WINELOADER configured for the next login (no ~/.local/bin shim); log out and back in, then start your DAW"
     return "missing", "not configured: a DAW would run plugins with the host's wine and rewrite the prefix"
+
+def broken_bundles() -> list[Path]:
+    """yabridge VST3 bundles whose Windows plugin link no longer resolves (the
+    plugin was uninstalled, or an update removed it and did not finish)."""
+    out = []
+    root = Path.home() / ".vst3/yabridge"
+    if not root.is_dir(): return out
+    for bundle in sorted(root.glob("*.vst3")):
+        win = bundle / "Contents/x86_64-win"
+        links = list(win.iterdir()) if win.is_dir() else []
+        if links and any(l.is_symlink() and not l.exists() for l in links): out.append(bundle)
+    return out
 
 def bridged(p: Prefix) -> list[dict]:
     """Parsed `yabridgectl status`, limited to plugin dirs inside this prefix

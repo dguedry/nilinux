@@ -178,19 +178,98 @@ def install_app(p: Prefix, setup: Path, reporter=None, keep_trace=False) -> dict
         msis = list(bag.glob("*.msi"))
         if not msis: raise RuntimeError("no inner MSI in installer")
         r.ok(msis[0].name)
-        n = deploy_payload(p, msis[0], bag / "data", roots, r)
-        r.step("Writing registry keys")
-        vals = {}
-        for k, v in regkeys.items():
-            key, val = _split_key(k)
-            if not key: r.log(f"skipping registry entry without a key: {k}"); continue
-            vals.setdefault("HKLM\\" + key, {})[val] = ("REG_SZ", v)
-        if vals: p.reg_import_values(vals, "nilinux-app-install.reg")
-        r.ok(f"{sum(len(x) for x in vals.values())} value(s)")
+        n = _deploy_and_register(p, msis[0], bag / "data", roots, regkeys, r)
         if not keep_trace: trace.unlink(missing_ok=True)
         return {"name": name, "method": "deploy", "files": n, "regkeys": regkeys}
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+def _deploy_and_register(p: Prefix, msi: Path, bag: Path, roots: dict, regkeys: dict, r) -> int:
+    n = deploy_payload(p, msi, bag, roots, r)
+    r.step("Writing registry keys")
+    vals = {}
+    for k, v in regkeys.items():
+        key, val = _split_key(k)
+        if not key: r.log(f"skipping registry entry without a key: {k}"); continue
+        vals.setdefault("HKLM\\" + key, {})[val] = ("REG_SZ", v)
+    if vals: p.reg_import_values(vals, "nilinux-app-install.reg")
+    r.ok(f"{sum(len(x) for x in vals.values())} value(s)")
+    return n
+
+# --- installs Native Access started and did not finish ------------------------------------------------------
+# NA runs NI's InstallAware setups itself. Under Wine one can remove the previous
+# version's files and then die before deploying the new ones, leaving the extracted
+# installer (stub exe, inner MSI and the FileBag) in the user's Temp folder. That
+# folder is the evidence and, with the download NA kept, enough to finish the job.
+@dataclass
+class StagedInstall:
+    name: str            # product, from "<name> Setup PC.exe"
+    dir: Path            # the mia*.tmp folder
+    exe: Path
+    msi: Path
+    download: Path | None = None   # the installer NA downloaded, if still around
+
+def staged_installs(p: Prefix) -> list[StagedInstall]:
+    temp = p.user_dir / "AppData/Local/Temp"
+    out = []
+    if not temp.is_dir(): return out
+    for d in sorted(temp.glob("mia*.tmp")):
+        exes = list(d.glob("* Setup PC.exe")); msis = list((d / "data").glob("*.msi")) or list(d.glob("*.msi"))
+        if not exes or not msis or not (d / "data").is_dir(): continue
+        name = re.sub(r"\s+Setup PC\.exe$", "", exes[0].name, flags=re.I)
+        out.append(StagedInstall(name, d, exes[0], msis[0], _find_download(p, name)))
+    return out
+
+def _find_download(p: Prefix, name: str) -> Path | None:
+    """NA keeps the downloaded installer (zip or exe) in its download location."""
+    from . import native_access as na
+    loc, _ = na.download_location_status(p)
+    dirs = [p.to_host(loc)] if loc else []
+    dirs.append(p.drive_c / "users/Public/Downloads")
+    key = re.sub(r"[^a-z0-9]", "", name.lower())
+    for d in dirs:
+        if not d.is_dir(): continue
+        for f in sorted(d.iterdir(), key=lambda f: f.stat().st_mtime, reverse=True):
+            if f.suffix.lower() in (".zip", ".exe") and key in re.sub(r"[^a-z0-9]", "", f.name.lower()):
+                return f
+    return None
+
+def finish_staged_installs(p: Prefix, reporter=None) -> list[dict]:
+    """Complete every install Native Access left half-done. Prefers re-running the
+    installer NA downloaded (the normal install_app path, with its deploy fallback);
+    without it, runs the staged stub under an MSI trace to learn the destination
+    roots and deploys the staged FileBag. Returns install_app-style summaries."""
+    r = null_reporter(reporter)
+    results = []
+    for st in staged_installs(p):
+        if any(p.is_running(x) for x in ("Native Access.exe", f"{st.name} Setup")):
+            r.step(f"Finishing {st.name} install"); r.skip("Native Access is running; try again after it exits"); continue
+        try:
+            if st.download is not None:
+                r.log(f"{st.name}: using the installer Native Access downloaded ({st.download.name})")
+                res = install_app(p, st.download, r)
+            else:
+                res = _finish_from_staged(p, st, r)
+            shutil.rmtree(st.dir, ignore_errors=True)
+            results.append(res)
+        except Exception as e:
+            r.step(f"Finishing {st.name} install"); r.fail(str(e)[:120])
+    return results
+
+def _finish_from_staged(p: Prefix, st: StagedInstall, r) -> dict:
+    paths.ensure_dirs()
+    trace = paths.LOGS / f"{st.name}-finish.trace"
+    r.step(f"Re-running staged installer: {st.exe.name}")
+    cp = p.run([str(st.exe), "/s"], debug="+msi", timeout=3600, capture=False, stderr_to=trace)
+    roots, regkeys = parse_trace(trace)
+    if cp.returncode == 0 and regkeys and any(p.reg_query(_split_key(k)[0]).get(_split_key(k)[1]) for k in regkeys):
+        r.ok("installer succeeded"); trace.unlink(missing_ok=True)
+        return {"name": st.name, "method": "installer", "regkeys": regkeys}
+    r.fail(f"installer exit {cp.returncode}; deploying the staged payload")
+    if not roots: raise RuntimeError("trace has no destination roots; cannot deploy")
+    n = _deploy_and_register(p, st.msi, st.dir / "data", roots, regkeys, r)
+    trace.unlink(missing_ok=True)
+    return {"name": st.name, "method": "deploy", "files": n, "regkeys": regkeys}
 
 def _split_key(k: str) -> tuple[str, str]:
     key, _, val = k.rpartition("\\"); return key, val

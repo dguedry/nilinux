@@ -1,7 +1,7 @@
 """Command-line front end. Every subcommand is a thin call into the package."""
 import argparse, sys
 from pathlib import Path
-from . import __version__, paths, wine, native_access as na, products, yabridge, doctor
+from . import __version__, paths, wine, native_access as na, products, yabridge, doctor, prefixes
 from .progress import ConsoleReporter
 
 def _prefix(create=False) -> wine.Prefix:
@@ -38,8 +38,8 @@ def cmd_launch(a):
     proc = na.launch(p, r, extra_args=a.args)
     print(f"Native Access started (pid {proc.pid}); log: {paths.LOGS/'native-access-launch.log'}")
     if a.wait:
-        proc.wait(); print("Native Access exited; registering libraries and syncing yabridge")
-        products.register_all_libraries(p, r); yabridge.sync(p, r)
+        proc.wait(); print("Native Access exited; finishing installs, registering libraries and syncing yabridge")
+        products.finish_staged_installs(p, r); products.register_all_libraries(p, r); yabridge.sync(p, r)
 
 def cmd_update(a):
     p = _prefix(); r = ConsoleReporter()
@@ -88,6 +88,18 @@ def cmd_sync(a):
 def cmd_status(a):
     p = _prefix(); print(yabridge.status(p))
 
+def cmd_prefixes(a):
+    p = _prefix(); print(prefixes.report(p, na.NTK_PORTS, yabridge.status(p)))
+
+def cmd_finish_installs(a):
+    p = _prefix(); r = ConsoleReporter()
+    staged = products.staged_installs(p)
+    if not staged: print("no interrupted Native Access installs found"); return
+    res = products.finish_staged_installs(p, r)
+    for x in res: print(f"  {x['name']}: finished via {x['method']}")
+    if not a.no_sync: yabridge.sync(p, r)
+    if r.failed: sys.exit("finished with failures")
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="nilinux", description="Native Instruments on Linux: Native Access, products and VST bridging without touching Wine yourself.")
     ap.add_argument("--version", action="version", version=__version__)
@@ -111,6 +123,9 @@ def main(argv=None):
     s.add_argument("dirs", nargs="*", help="extra plugin directories"); s.add_argument("--daw-env", action="store_true", help="make DAWs use the app's wine (WINELOADER)")
     s.set_defaults(f=cmd_sync)
     sp.add_parser("status", help="yabridge status").set_defaults(f=cmd_status)
+    sp.add_parser("prefixes", help="which nilinux prefixes exist, which one runs the NI daemon, what yabridge points at").set_defaults(f=cmd_prefixes)
+    s = sp.add_parser("finish-installs", help="complete installs Native Access started but did not finish")
+    s.add_argument("--no-sync", action="store_true"); s.set_defaults(f=cmd_finish_installs)
     a = ap.parse_args(argv); a.f(a)
 
 if __name__ == "__main__": main()
