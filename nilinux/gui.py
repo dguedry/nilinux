@@ -148,8 +148,7 @@ class Window(Adw.ApplicationWindow):
             prods = products.installed(self.prefix); bridged = yabridge.bridged(self.prefix)
             daw_state, daw_detail = yabridge.daw_environment_status(self.prefix)
             def show():
-                if daw_state == "pending": self.daw_banner.set_title("Log out and back in, then start your DAW: it must run plugins with this app's wine. Plugins are not bridged until then.")
-                elif daw_state == "missing": self.daw_banner.set_title("DAWs would run plugins with the host's wine and damage the prefix — run Re-run setup / repair. Plugins are not bridged until then.")
+                if daw_state == "missing": self.daw_banner.set_title("DAWs would run plugins with the host's wine and damage the prefix — run Re-run setup / repair. Plugins are not bridged until then.")
                 self.daw_banner.set_revealed(daw_state != "active")
                 rows = []
                 for p in prods:

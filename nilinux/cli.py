@@ -120,7 +120,7 @@ def main(argv=None):
     s.add_argument("installer"); s.add_argument("--third-party", action="store_true", help="run interactively (non-NI installer)")
     s.add_argument("--keep-trace", action="store_true"); s.add_argument("--no-sync", action="store_true"); s.set_defaults(f=cmd_install)
     s = sp.add_parser("sync", help="bridge the prefix's plugins to Linux DAWs with yabridge")
-    s.add_argument("dirs", nargs="*", help="extra plugin directories"); s.add_argument("--daw-env", action="store_true", help="make DAWs use the app's wine (WINELOADER)")
+    s.add_argument("dirs", nargs="*", help="extra plugin directories"); s.add_argument("--daw-env", action="store_true", help="make DAWs use the app's wine for this prefix (~/.local/bin/wine shim)")
     s.set_defaults(f=cmd_sync)
     sp.add_parser("status", help="yabridge status").set_defaults(f=cmd_status)
     sp.add_parser("prefixes", help="which nilinux prefixes exist, which one runs the NI daemon, what yabridge points at").set_defaults(f=cmd_prefixes)

@@ -77,15 +77,20 @@ the prefix, logs. Nothing is installed system-wide.
   *Re-run setup / repair* and *Make DAWs use this wine*.
 
 **DAWs must run plugins with the app's wine.** Setup installs a small
-`~/.local/bin/wine` shim that execs the app's wine (with `WINEFSYNC=1`), and
-writes `~/.config/environment.d/50-nilinux.conf` (`WINELOADER`) for desktops that
-import it. yabridge resolves `wine` through PATH, and `~/.local/bin` precedes
+`~/.local/bin/wine` shim that **routes by prefix**: when `WINEPREFIX` is the
+app's prefix (yabridge sets it from the plugin's location) it execs the app's
+wine with `WINEFSYNC=1`; for every other prefix (`~/.wine`, your own) it execs
+the next `wine` on PATH, so a Wine you already have keeps serving your own
+prefixes untouched, and if the app is uninstalled the shim falls through to it
+too. yabridge resolves `wine` through PATH, and `~/.local/bin` precedes
 `/usr/bin` on Debian, Ubuntu, Mint and Fedora desktops, so the shim takes effect
-for every wine started afterwards, with no re-login. Until one of these is
-active the app does not bridge plugins, and Health and the Plugins tab say so: a
-DAW using the host's own wine would run *its* prefix update on the app's prefix
-and replace the DLLs with another version's. If you already have your own
-`~/.local/bin/wine`, setup leaves it alone and tells you.
+for every wine started afterwards, with no re-login. Until it is active the app
+does not bridge plugins, and Health and the Plugins tab say so: a DAW using the
+host's own wine would run *its* prefix update on the app's prefix and replace
+the DLLs with another version's. If you already have your own
+`~/.local/bin/wine`, setup leaves it alone and tells you. (Releases before
+0.1.4 also wrote a global `WINELOADER` to `~/.config/environment.d`; setup
+removes that file.)
 - **Progress** — step list, download bar and log for long tasks.
 
 Bridged plugins land in `~/.vst/yabridge`, `~/.vst3/yabridge`,
@@ -172,7 +177,7 @@ Each of these was diagnosed from a real failure.
 | NI apps freeze each other | Boost named mutexes are not crash-safe | Clears stale mutex files when no NI app runs |
 | Every NI application install fails instantly in the Flatpak (daemon error 731; any 32-bit program: "Application could not be started") | Flatpak's seccomp filter blocks `modify_ldt`, which Wine's WoW64 layer needs for 32-bit code; NI's InstallAware setup exes are 32-bit | Manifest grants `--allow=multiarch`; Health checks that a 32-bit program runs |
 | Every download fails ("Download folder does not exist", "could not create new file") | A fresh prefix has no download location; Wine's `Downloads` folder is a symlink to the host's, which the sandbox mounts read-only | Points NA at `C:\users\Public\Downloads` inside the prefix whenever the configured location is unset or not writable (checked at setup and on every launch; a working custom location is kept) |
-| Plugins refuse to load in a DAW ("prefix updated by a newer Wine") | Host wine older than the prefix's wine | One wine binary for both: setup installs a `~/.local/bin/wine` shim (and `WINELOADER` via environment.d); plugins are not bridged until one is active |
+| Plugins refuse to load in a DAW ("prefix updated by a newer Wine") | Host wine older than the prefix's wine | One wine binary for both: setup installs a `~/.local/bin/wine` shim that routes the app's prefix to the app's wine and every other prefix to the host's; plugins are not bridged until it is active |
 | Mouse clicks in plugin GUIs land in the wrong place, in every DAW | yabridge 5.1.1 (the last release) with Wine ≥ 9.22; the fix is only in yabridge's master branch | CI builds yabridge master against the pinned Wine and the app installs that build; Health: *yabridge matches this wine* |
 | Plugins hang in every DAW; Health shows the NTK ports held by another prefix | Two nilinux prefixes (Flatpak and source install, or an old app id) both bridged; the daemon that owns the ports belongs to the other one | `sync` unregisters other nilinux prefixes' directories; Health names the daemon's prefix from the listener's `WINEPREFIX`; `nilinux prefixes` shows the whole picture |
 | A plugin vanished after Native Access updated it; the bridge link points at a missing file | NA's InstallAware update removed the old files and died before deploying the new ones | Finishes the install from the staged payload / kept download after NA exits, or via *Finish interrupted installs* |

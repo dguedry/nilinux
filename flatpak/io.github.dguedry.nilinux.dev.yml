@@ -38,6 +38,9 @@ finish-args:
   # we must share the real /tmp; sharing only xdg-run/wine splits them (the
   # sandbox lands in XDG_RUNTIME_DIR, the host in /tmp — plugins hang with no
   # daemon in their wineserver). Keep xdg-run/wine too for older wine builds.
+  # (--filesystem=/tmp trips Flathub's finish-args-host-tmp-access lint, which is
+  # on Flathub's documented exceptions list — request the exception at submission.
+  # A narrower /tmp/.wine-<uid> can't be expressed without hardcoding the uid.)
   - --filesystem=/tmp
   - --filesystem=xdg-run/wine:create
   - --env=WINEDLLOVERRIDES=winemenubuilder.exe=d;mscoree=d;mshtml=d

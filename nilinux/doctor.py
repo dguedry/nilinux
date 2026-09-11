@@ -104,6 +104,5 @@ def run(p: wine.Prefix | None = None) -> list[Check]:
         yok, ydetail = yabridge.compatibility()
         c.append(Check("yabridge matches this wine", yok, ydetail, fix="nilinux sync (installs the nilinux-built yabridge for this wine)"))
     st, detail = yabridge.daw_environment_status(p)
-    c.append(Check("DAWs run plugins with this wine", st == "active", detail,
-                   fix="log out and back in" if st == "pending" else "nilinux setup"))
+    c.append(Check("DAWs run plugins with this wine", st == "active", detail, fix="nilinux setup"))
     return c
