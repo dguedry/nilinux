@@ -35,23 +35,108 @@ def _yctl_env(p: Prefix) -> dict:
 
 def installed() -> str | None:
     if not YCTL.exists(): return None
+    if (m := build_marker()):
+        return f"{m.get('yabridge_commit', '?')} (git {m.get('yabridge_ref', 'master')}, built for wine {m.get('wine_version', '?')})"
     try: return subprocess.run([str(YCTL), "--version"], capture_output=True, text=True, timeout=20).stdout.strip()
     except Exception: return "unknown"
 
-def install(reporter=None) -> str:
-    r = null_reporter(reporter)
-    if YCTL.exists(): return installed() or "present"
-    r.step("Installing yabridge (latest release)")
-    rel = json.loads(text("https://api.github.com/repos/robbert-vdh/yabridge/releases/latest"))
-    url = next(a["browser_download_url"] for a in rel["assets"]
-               if re.fullmatch(r"yabridge-[0-9.]+\.tar\.gz", a["name"]))
-    tgz = fetch(url, paths.DOWNLOADS / Path(url).name, reporter=r, label="yabridge")
+# --- which yabridge works with which Wine ------------------------------------------------------
+# yabridge's last release (5.1.1, Nov 2024) predates the window-management changes
+# in Wine 9.22: with newer Wine, mouse clicks in bridged plugin GUIs land in the
+# wrong place, in every DAW. The fix lives in yabridge's master branch, so nilinux
+# builds master against its pinned Wine (scripts/build-yabridge.sh, published with
+# each nilinux release) and installs that instead of the upstream release.
+NILINUX_REPO = "dguedry/nilinux"
+MARKER = YAB_DIR / "nilinux-build.json"
+WINE_NEEDS_MASTER = (9, 22)
+
+def build_marker() -> dict | None:
+    """Metadata of a nilinux-built yabridge, or None for an upstream release."""
+    try: return json.loads(MARKER.read_text()) if MARKER.exists() else None
+    except (OSError, ValueError): return None
+
+def pinned_wine_version() -> str:
+    from .wine import WINE_BUILD
+    m = re.search(r"[0-9]+(?:\.[0-9]+)+", WINE_BUILD["name"])
+    return m.group(0) if m else ""
+
+def _vtuple(v: str) -> tuple[int, ...]:
+    return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
+
+def needs_master(wine_version: str) -> bool:
+    return bool(wine_version) and _vtuple(wine_version) >= WINE_NEEDS_MASTER
+
+def pick_asset(assets: list[dict], wine_version: str) -> dict | None:
+    """The nilinux-built yabridge tarball for exactly this Wine version, from a
+    GitHub release's asset list ([{'name', 'browser_download_url'}, ...])."""
+    pat = re.compile(rf"^yabridge-[0-9a-f]+-wine-{re.escape(wine_version)}\.tar\.gz$")
+    for a in assets:
+        if pat.match(a.get("name", "")): return a
+    return None
+
+def compatibility() -> tuple[bool, str]:
+    """(ok, detail) for the installed yabridge against the pinned Wine."""
+    if not YCTL.exists(): return False, "not installed"
+    pinned = pinned_wine_version()
+    if (m := build_marker()):
+        if pinned and str(m.get("wine_version", "")).startswith(pinned): return True, f"nilinux build {m.get('yabridge_commit', '?')} for wine {pinned}"
+        return False, f"built for wine {m.get('wine_version', '?')}, but this app pins wine {pinned}"
+    if not needs_master(pinned): return True, f"upstream release; fine with wine {pinned}"
+    return False, (f"upstream release {installed()} predates Wine 9.22's window changes: with wine {pinned} mouse clicks in "
+                   "bridged plugin GUIs land in the wrong place, in every DAW")
+
+def _find_build_tarball(wine_version: str, r) -> tuple[Path | None, str]:
+    """A nilinux-built yabridge for this Wine: NILINUX_YABRIDGE_TARBALL, else the
+    asset attached to the latest nilinux release. Returns (local path, label)."""
+    override = os.environ.get("NILINUX_YABRIDGE_TARBALL")
+    if override:
+        f = Path(override).expanduser()
+        if f.is_file(): return f, f"{f.name} (NILINUX_YABRIDGE_TARBALL)"
+        r.log(f"NILINUX_YABRIDGE_TARBALL={override} does not exist; ignoring")
+    try:
+        rel = json.loads(text(f"https://api.github.com/repos/{NILINUX_REPO}/releases/latest"))
+    except Exception as e:
+        r.log(f"could not read nilinux releases: {str(e)[:80]}"); return None, ""
+    a = pick_asset(rel.get("assets", []), wine_version)
+    if not a: return None, ""
+    return fetch(a["browser_download_url"], paths.DOWNLOADS / a["name"], reporter=r, label="yabridge"), f"{a['name']} (nilinux release {rel.get('tag_name', '')})"
+
+def _install_tarball(tgz: Path, r):
+    """Replace ~/.local/share/yabridge with the tarball's yabridge/ directory."""
+    if YAB_DIR.exists():
+        bak = YAB_DIR.with_name(YAB_DIR.name + ".bak")
+        if bak.exists(): shutil.rmtree(bak)
+        YAB_DIR.rename(bak)
     YAB_DIR.parent.mkdir(parents=True, exist_ok=True)
     with tarfile.open(tgz) as t: t.extractall(YAB_DIR.parent, filter="tar")
     (Path.home() / ".local/bin").mkdir(parents=True, exist_ok=True)
     link = Path.home() / ".local/bin/yabridgectl"
     if not link.exists(): link.symlink_to(YCTL)
-    r.ok(rel["tag_name"]); return rel["tag_name"]
+
+def install(reporter=None, force=False) -> str:
+    """Install yabridge, or replace an upstream release that cannot work with the
+    pinned Wine by nilinux's own build of yabridge master. Idempotent."""
+    r = null_reporter(reporter)
+    pinned = pinned_wine_version()
+    marker = build_marker()
+    if YCTL.exists() and not force:
+        if marker and pinned and str(marker.get("wine_version", "")).startswith(pinned): return installed() or "present"
+        if not marker and not needs_master(pinned): return installed() or "present"
+    r.step("Installing yabridge" + (f" for wine {pinned}" if pinned else ""))
+    tgz, label = _find_build_tarball(pinned, r)
+    if tgz is not None:
+        _install_tarball(tgz, r)
+        if not MARKER.exists():
+            MARKER.write_text(json.dumps({"yabridge_ref": "unknown", "yabridge_commit": "unknown", "wine_version": pinned}))
+        r.ok(label); return installed() or "present"
+    if YCTL.exists():
+        r.skip(f"keeping {installed()}; no nilinux build for wine {pinned} is published yet"); return installed() or "present"
+    rel = json.loads(text("https://api.github.com/repos/robbert-vdh/yabridge/releases/latest"))
+    url = next(a["browser_download_url"] for a in rel["assets"]
+               if re.fullmatch(r"yabridge-[0-9.]+\.tar\.gz", a["name"]))
+    tgz = fetch(url, paths.DOWNLOADS / Path(url).name, reporter=r, label="yabridge")
+    _install_tarball(tgz, r)
+    r.ok(rel["tag_name"] + (" -- NOTE: too old for this wine, see Health" if needs_master(pinned) else "")); return rel["tag_name"]
 
 def registry_vst_path(p: Prefix) -> Path | None:
     for hive in ("system.reg", "user.reg"):

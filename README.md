@@ -118,6 +118,17 @@ Health reports:
 switching prefixes, rescan plugins in your DAW: its plugin list still holds
 the old entries until then.
 
+## yabridge and Wine versions
+
+yabridge's last release (5.1.1, November 2024) predates the window-management
+changes in Wine 9.22. With a newer Wine, mouse clicks in bridged plugin GUIs
+land in the wrong place, in every DAW. The fix is in yabridge's master branch,
+so this app builds master against its pinned Wine (`scripts/build-yabridge.sh`,
+run by CI and attached to each release as `yabridge-<commit>-wine-<version>.tar.gz`)
+and installs that instead of the upstream release; `sync` upgrades an existing
+upstream install. Health shows *yabridge matches this wine*. To use a build of
+your own, point `NILINUX_YABRIDGE_TARBALL` at the tarball and run `nilinux sync`.
+
 ## Interrupted installs
 
 Native Access runs NI's InstallAware setups itself. Under Wine one can remove
@@ -162,6 +173,7 @@ Each of these was diagnosed from a real failure.
 | Every NI application install fails instantly in the Flatpak (daemon error 731; any 32-bit program: "Application could not be started") | Flatpak's seccomp filter blocks `modify_ldt`, which Wine's WoW64 layer needs for 32-bit code; NI's InstallAware setup exes are 32-bit | Manifest grants `--allow=multiarch`; Health checks that a 32-bit program runs |
 | Every download fails ("Download folder does not exist", "could not create new file") | A fresh prefix has no download location; Wine's `Downloads` folder is a symlink to the host's, which the sandbox mounts read-only | Points NA at `C:\users\Public\Downloads` inside the prefix whenever the configured location is unset or not writable (checked at setup and on every launch; a working custom location is kept) |
 | Plugins refuse to load in a DAW ("prefix updated by a newer Wine") | Host wine older than the prefix's wine | One wine binary for both: setup installs a `~/.local/bin/wine` shim (and `WINELOADER` via environment.d); plugins are not bridged until one is active |
+| Mouse clicks in plugin GUIs land in the wrong place, in every DAW | yabridge 5.1.1 (the last release) with Wine ≥ 9.22; the fix is only in yabridge's master branch | CI builds yabridge master against the pinned Wine and the app installs that build; Health: *yabridge matches this wine* |
 | Plugins hang in every DAW; Health shows the NTK ports held by another prefix | Two nilinux prefixes (Flatpak and source install, or an old app id) both bridged; the daemon that owns the ports belongs to the other one | `sync` unregisters other nilinux prefixes' directories; Health names the daemon's prefix from the listener's `WINEPREFIX`; `nilinux prefixes` shows the whole picture |
 | A plugin vanished after Native Access updated it; the bridge link points at a missing file | NA's InstallAware update removed the old files and died before deploying the new ones | Finishes the install from the staged payload / kept download after NA exits, or via *Finish interrupted installs* |
 | After a DAW session, NI installers die instantly ("Cannot create temporary folder" style dialogs, daemon error 731) | A DAW's yabridge ran the *host* wine on the prefix, whose prefix update replaced the built-in DLLs with another version's | Health compares built-in DLLs with the app's wine; setup re-runs the prefix update with the right wine (native C runtime files are kept) |

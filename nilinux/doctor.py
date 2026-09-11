@@ -100,6 +100,9 @@ def run(p: wine.Prefix | None = None) -> list[Check]:
     c.append(Check("libraries registered for Kontakt", not unreg, ", ".join(unreg), fix="nilinux register"))
     yv = yabridge.installed()
     c.append(Check("yabridge", yv is not None, yv or "", fix="nilinux sync"))
+    if yv is not None:
+        yok, ydetail = yabridge.compatibility()
+        c.append(Check("yabridge matches this wine", yok, ydetail, fix="nilinux sync (installs the nilinux-built yabridge for this wine)"))
     st, detail = yabridge.daw_environment_status(p)
     c.append(Check("DAWs run plugins with this wine", st == "active", detail,
                    fix="log out and back in" if st == "pending" else "nilinux setup"))
