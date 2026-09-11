@@ -24,7 +24,7 @@ def cmd_setup(a):
     if na.na_exe(p).exists():
         v = na.version_notice(p)
         if v["installed_known_bad"]: print(f"\nNative Access {v['installed']} does not work on this stack: {v['installed_known_bad']}. Install a validated version: {', '.join(sorted(na.KNOWN_GOOD))}.")
-        if v["newer"]: print(f"\nNative Access {v['latest']} is available ({'validated' if v['latest_known_good'] else 'not yet validated'} on this stack); installed {v['installed']}. Update via: nilinux install-na <downloaded file>")
+        if v["newer"]: print(f"\nNative Access {v['latest']} is available ({'validated' if v['latest_known_good'] else ('DOES NOT WORK' if v['latest_known_bad'] else 'not yet validated')} on this stack); installed {v['installed']}. Update via: nilinux install-na <downloaded file>")
         print("\nDone. Launch with: nilinux launch")
     else: _na_hint()
 

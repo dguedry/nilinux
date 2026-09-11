@@ -58,7 +58,7 @@ def run(p: wine.Prefix | None = None) -> list[Check]:
                            fix="install a validated version (" + ", ".join(sorted(na.KNOWN_GOOD)) + "): nilinux install-na <installer>"))
         elif v["newer"]:
             c.append(Check("Native Access version", True, f"{v['installed']} installed; {v['latest']} available "
-                           + ("(validated)" if v["latest_known_good"] else "(not yet validated on this stack)")))
+                           + ("(validated)" if v["latest_known_good"] else ("(does not work on this stack: " + v["latest_known_bad"] + ")" if v["latest_known_bad"] else "(not yet validated on this stack)"))))
         if s["pending_update"]:
             c.append(Check("no pending legacy self-update", False, "apply with: nilinux update, or ignore", fix="nilinux update"))
     # The NTK daemon binds fixed localhost ports, one daemon per machine. A daemon

@@ -485,7 +485,8 @@ def version_notice(p: Prefix) -> dict:
     latest = latest_version()
     newer = bool(inst_short and latest and _vtuple(latest) > _vtuple(inst_short))
     return {"installed": inst_short, "latest": latest, "newer": newer, "latest_known_good": latest in KNOWN_GOOD if latest else False,
-            "installed_known_bad": KNOWN_BAD.get(inst_short) if inst_short else None}
+            "installed_known_bad": KNOWN_BAD.get(inst_short) if inst_short else None,
+            "latest_known_bad": KNOWN_BAD.get(latest) if latest else None}
 
 def _vtuple(v: str): return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
 
