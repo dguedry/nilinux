@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.6" date="2026-09-11">
+      <description>
+        <p>Recognise NA 3.26's built-in dependency fix; flag 3.26.0 as not working; --no-sandbox</p>
+      </description>
+    </release>
     <release version="0.1.5" date="2026-09-11">
       <description>
         <p>CI: install libdbus-1-dev for the yabridge build</p>
