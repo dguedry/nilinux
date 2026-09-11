@@ -18,11 +18,11 @@ UCRT_SHA256 = "52b196bbe9016488c735e7b41805b651261ffa5d7aa86eb6a1d0095be83687b2"
 VC2022_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 STACK_RESERVE = 0x4000000  # 64MB
 # NA versions validated on this stack (all fixes apply, window renders, installs work)
-KNOWN_GOOD = {"3.23.0", "3.25.2"}
-# Versions that do not work on this stack yet, with the reason shown to the user.
-KNOWN_BAD = {
-    "3.26.0": "Electron 43: the renderer process crashes at start and Wine 11.17's wineserver then spins at 100% CPU, hanging every Wine process (plugins included)",
-}
+KNOWN_GOOD = {"3.23.0", "3.25.2", "3.26.0"}
+# Versions that do not work on this stack, with the reason shown to the user.
+# (Empty for now: 3.26.0 was listed here for a day after a transient prefix
+# state made its child processes and renderer fail; a clean setup cleared it.)
+KNOWN_BAD: dict[str, str] = {}
 UPDATER_DISABLED_URL = "http://127.0.0.1:1/native-access-self-update-disabled-by-nilinux"
 DEP_MARK = "/*NA_DEP_PATCH*/"
 NTK_PORTS = (7865, 5563, 5146)   # NTKDaemon listens on 127.0.0.1 — one daemon per machine
