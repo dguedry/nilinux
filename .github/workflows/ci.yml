@@ -150,7 +150,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.auto-tag.outputs.sha || github.sha }}
-      - run: sudo apt-get update -q && sudo apt-get install -y -q meson ninja-build libxcb1-dev pkg-config
+      - run: sudo apt-get update -q && sudo apt-get install -y -q meson ninja-build libxcb1-dev libdbus-1-dev pkg-config
       - name: Download the pinned Wine build
         run: |
           set -euo pipefail

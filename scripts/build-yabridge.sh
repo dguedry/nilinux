@@ -10,7 +10,7 @@
 # Wine always match, and produces yabridge-<ref>-wine-<version>.tar.gz whose
 # layout equals an upstream release tarball (a yabridge/ directory).
 #
-# Needs: git, meson, ninja, gcc/g++, pkg-config, libxcb1-dev (Ubuntu names).
+# Needs: git, meson, ninja, gcc/g++, pkg-config, libxcb1-dev, libdbus-1-dev (Ubuntu names).
 # yabridgectl (Rust) is not rebuilt; it is taken from the upstream release.
 set -euo pipefail
 WINE="${1:?wine build dir, e.g. ~/.local/share/nilinux/wine/wine-11.17-staging-amd64-wow64}"
