@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.4" date="2026-09-11">
+      <description>
+        <p>Route the wine shim by prefix so a host Wine keeps its own prefixes</p>
+      </description>
+    </release>
     <release version="0.1.3" date="2026-09-09">
       <description>
         <p>CI: decide the release skip from the commit subject only</p>
