@@ -6,5 +6,5 @@ them to Linux DAWs with yabridge. The CLI (nilinux.cli) and the GUI are thin
 layers over the functions in this package; every function reports progress
 through a nilinux.progress.Reporter and returns plain data.
 """
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 APP_NAME = "nilinux"
