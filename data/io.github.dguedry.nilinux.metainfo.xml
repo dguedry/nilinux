@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.7" date="2026-09-11">
+      <description>
+        <p>Say a known-bad newer Native Access does not work instead of 'not yet validated'</p>
+      </description>
+    </release>
     <release version="0.1.6" date="2026-09-11">
       <description>
         <p>Recognise NA 3.26's built-in dependency fix; flag 3.26.0 as not working; --no-sandbox</p>
