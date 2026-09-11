@@ -257,7 +257,10 @@ class Window(Adw.ApplicationWindow):
         def work():
             v = na.version_notice(self.prefix)
             def show():
-                if v["newer"]:
+                if v["installed_known_bad"]:
+                    self.na_update_row.set_subtitle(f"Installed {v['installed']} does not work on this stack: {v['installed_known_bad']}. "
+                        f"Install a validated version ({', '.join(sorted(na.KNOWN_GOOD))}) by picking its installer here.")
+                elif v["newer"]:
                     self.na_update_row.set_subtitle(f"Installed {v['installed']} · {v['latest']} available "
                         + ("(validated on this stack)" if v["latest_known_good"] else "(not yet validated on this stack)") + ". Download it from NI, then pick the file here.")
                 elif v["installed"]: self.na_update_row.set_subtitle(f"Installed {v['installed']} (current). Pick Native-Access-latest.exe from your Downloads folder to reinstall.")

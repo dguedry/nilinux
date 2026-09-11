@@ -175,6 +175,7 @@ Each of these was diagnosed from a real failure.
 | NI app installers fail ("Setup has failed: FALSE") | InstallAware queries an MSI virtual table Wine's SQL parser rejects | Runs the installer silently under an MSI trace; if it fails, deploys the payload from the trace's destination map and writes the registry keys |
 | Library installed but invisible in Kontakt | Daemon skipped the HKLM key Kontakt scans | Writes `ContentDir`/`HU`/`JDX` from the daemon's record and NI's catalogue |
 | NI apps freeze each other | Boost named mutexes are not crash-safe | Clears stale mutex files when no NI app runs |
+| Native Access 3.26.0 quits within a second of starting ("GPU process launch failed: error_code=39", "Network service crashed", "GPU process isn't usable. Goodbye.") | Electron 43's Windows process sandbox cannot spawn child processes under Wine | Launches with `--no-sandbox` (alongside `--disable-gpu`). **3.26.0 is still unsupported**: its renderer process then crashes at start and Wine 11.17's wineserver spins at 100% CPU, hanging every Wine process on the machine. Health, `status` and the Install tab say so (`KNOWN_BAD`); install a validated version instead. NI's download serves only the latest build, so keep a copy of a validated installer |
 | Every NI application install fails instantly in the Flatpak (daemon error 731; any 32-bit program: "Application could not be started") | Flatpak's seccomp filter blocks `modify_ldt`, which Wine's WoW64 layer needs for 32-bit code; NI's InstallAware setup exes are 32-bit | Manifest grants `--allow=multiarch`; Health checks that a 32-bit program runs |
 | Every download fails ("Download folder does not exist", "could not create new file") | A fresh prefix has no download location; Wine's `Downloads` folder is a symlink to the host's, which the sandbox mounts read-only | Points NA at `C:\users\Public\Downloads` inside the prefix whenever the configured location is unset or not writable (checked at setup and on every launch; a working custom location is kept) |
 | Plugins refuse to load in a DAW ("prefix updated by a newer Wine") | Host wine older than the prefix's wine | One wine binary for both: setup installs a `~/.local/bin/wine` shim that routes the app's prefix to the app's wine and every other prefix to the host's; plugins are not bridged until it is active |
@@ -251,6 +252,6 @@ file, metainfo, icon and `gui.APP_ID`.
 - The author's machine (Ubuntu-based).
 - A fresh Fedora 43 Workstation VM: no Steam, no wine, GNOME on Wayland —
   environment setup in 97 s, Native Access and the GUI render, sync works.
-- Native Access 3.23.0 and 3.25.2 (`KNOWN_GOOD` in `native_access.py`);
+- Native Access 3.23.0 and 3.25.2 (`KNOWN_GOOD` in `native_access.py`); 3.26.0 does not work yet (`KNOWN_BAD`, see the fixes table);
   Kontakt 8 Player 8.12.1, Kontakt 6.6.1 (its installer runs unmodified),
   Scarbee Mark I, Butch Vig Drums.

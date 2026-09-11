@@ -47,10 +47,16 @@ def run(p: wine.Prefix | None = None) -> list[Check]:
         c.append(Check("real ucrtbase.dll", s["ucrtbase"], fix="nilinux setup"))
         c.append(Check("VC++ 2022 runtime", s["vc_runtime"], fix="nilinux setup"))
         c.append(Check("NTK Daemon installed", s["ntk_daemon"], s["ntk_version"] or "", fix="nilinux setup"))
-        c.append(Check("dependency-check patch", s["dependency_patch"], fix="nilinux setup"))
+        dep = na.dependency_status(p)
+        c.append(Check("dependency-check patch", dep != "missing",
+                       "built into Native Access 3.26+" if dep == "native" else ("" if dep == "patched" else "NA picks an owned product over the installed Player: libraries show 'Requires Kontakt'"),
+                       fix="nilinux setup"))
         c.append(Check("NA self-updater disabled", s["self_update_disabled"], "updates only via a downloaded installer", fix="nilinux setup"))
         v = na.version_notice(p)
-        if v["newer"]:
+        if v["installed_known_bad"]:
+            c.append(Check("Native Access version", False, f"{v['installed']} does not work on this stack: {v['installed_known_bad']}",
+                           fix="install a validated version (" + ", ".join(sorted(na.KNOWN_GOOD)) + "): nilinux install-na <installer>"))
+        elif v["newer"]:
             c.append(Check("Native Access version", True, f"{v['installed']} installed; {v['latest']} available "
                            + ("(validated)" if v["latest_known_good"] else "(not yet validated on this stack)")))
         if s["pending_update"]:

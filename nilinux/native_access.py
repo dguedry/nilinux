@@ -19,6 +19,10 @@ VC2022_URL = "https://aka.ms/vs/17/release/vc_redist.x64.exe"
 STACK_RESERVE = 0x4000000  # 64MB
 # NA versions validated on this stack (all fixes apply, window renders, installs work)
 KNOWN_GOOD = {"3.23.0", "3.25.2"}
+# Versions that do not work on this stack yet, with the reason shown to the user.
+KNOWN_BAD = {
+    "3.26.0": "Electron 43: the renderer process crashes at start and Wine 11.17's wineserver then spins at 100% CPU, hanging every Wine process (plugins included)",
+}
 UPDATER_DISABLED_URL = "http://127.0.0.1:1/native-access-self-update-disabled-by-nilinux"
 DEP_MARK = "/*NA_DEP_PATCH*/"
 NTK_PORTS = (7865, 5563, 5146)   # NTKDaemon listens on 127.0.0.1 — one daemon per machine
@@ -395,8 +399,17 @@ MAIN_RX = r"out/main/index\.js"
 # --- fix 6: dependency check patch --------------------------------------------------------------------------------
 _DEP_PAT = re.compile(rb"(_0x[0-9a-f]+)=(_0x[0-9a-f]+)\[0x0\]\?\?(_0x[0-9a-f]+)\[0x0\],(_0x[0-9a-f]+)=\2\[_0x[0-9a-f]+\(0x[0-9a-f]+\)\]\((_0x[0-9a-f]+)=>\5\[")
 
+# NA >= 3.26.0 rewrote the selector and prefers installed products itself:
+# cand = bestInstalled ?? installed[0] ?? deploying ?? owned[0] ?? players[0]
+_DEP_NATIVE_PAT = re.compile(rb"(_0x[0-9a-f]+)=(_0x[0-9a-f]+)\?\?(_0x[0-9a-f]+)\[0x0\]\?\?(_0x[0-9a-f]+)\?\?(_0x[0-9a-f]+)\[0x0\]\?\?(_0x[0-9a-f]+)\[0x0\];if\(!\1\)")
+
+def dependency_native(js: bytes) -> bool:
+    """True when this renderer already lets an installed viable product satisfy
+    the dependency (NA >= 3.26.0), so no patch is needed."""
+    return _DEP_NATIVE_PAT.search(js) is not None
+
 def _dep_edit(js: bytes):
-    if DEP_MARK.encode() in js: return None
+    if DEP_MARK.encode() in js or dependency_native(js): return None
     ms = list(_DEP_PAT.finditer(js))
     if len(ms) != 1: raise LookupError(f"patch site not found ({len(ms)} matches)")
     m = ms[0]; cand, owned, players = m.group(1), m.group(2), m.group(3)
@@ -405,18 +418,29 @@ def _dep_edit(js: bytes):
     return js.replace(old, new, 1)
 
 def dependency_patch(p: Prefix, reporter=None) -> str:
-    """Make an *installed* viable Kontakt satisfy library dependency checks."""
+    """Make an *installed* viable Kontakt satisfy library dependency checks
+    (NA <= 3.25 picked the first owned non-Player product and reported the
+    installed Player as missing). NA >= 3.26 does this itself: nothing to patch."""
     r = null_reporter(reporter)
     r.step("Patching NA dependency check (installed Player wins)")
-    if dependency_patched(p): r.skip("already"); return "already"
+    st = dependency_status(p)
+    if st == "patched": r.skip("already"); return "already"
+    if st == "native": r.skip("built into Native Access 3.26+, no patch needed"); return "native"
     try: res = _patch_asar(p, {RENDERER_RX: _dep_edit}, r)
     except LookupError as e: r.fail(f"{e} — NA version not yet supported"); return "unsupported"
     st = res[RENDERER_RX]
     (r.ok if st == "patched" else r.fail)(st); return st if st == "patched" else "unsupported"
 
-def dependency_patched(p: Prefix) -> bool:
+def dependency_status(p: Prefix) -> str:
+    """'patched' (our marker present), 'native' (NA >= 3.26 selector), or 'missing'."""
     asar = na_dir(p) / "resources/app.asar"
-    return asar.exists() and DEP_MARK.encode() in asar.read_bytes()
+    if not asar.exists(): return "missing"
+    data = asar.read_bytes()
+    if DEP_MARK.encode() in data: return "patched"
+    return "native" if dependency_native(data) else "missing"
+
+def dependency_patched(p: Prefix) -> bool:
+    return dependency_status(p) != "missing"
 
 # --- fix 7: NA self-updater -------------------------------------------------------------------------------------
 _AU_ON, _AU_OFF = b"autoUpdateEnabled:!0", b"autoUpdateEnabled:!1"
@@ -460,7 +484,8 @@ def version_notice(p: Prefix) -> dict:
     inst_short = ".".join(inst.split(".")[:3]) if inst else None
     latest = latest_version()
     newer = bool(inst_short and latest and _vtuple(latest) > _vtuple(inst_short))
-    return {"installed": inst_short, "latest": latest, "newer": newer, "latest_known_good": latest in KNOWN_GOOD if latest else False}
+    return {"installed": inst_short, "latest": latest, "newer": newer, "latest_known_good": latest in KNOWN_GOOD if latest else False,
+            "installed_known_bad": KNOWN_BAD.get(inst_short) if inst_short else None}
 
 def _vtuple(v: str): return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
 
@@ -484,7 +509,11 @@ def launch(p: Prefix, reporter=None, extra_args=()) -> subprocess.Popen:
     paths.ensure_dirs()
     log = paths.LOGS / "native-access-launch.log"
     # --disable-gpu: NA >= 3.25's GPU process crash-loops under Wine (blank window)
-    return p.spawn([str(exe), "--disable-gpu", *extra_args], log=log)
+    # --no-sandbox: NA >= 3.26 (Electron 43) cannot start any child process under
+    #   Wine with Chromium's Windows sandbox on ("GPU process launch failed:
+    #   error_code=39", "Network service crashed", then "GPU process isn't usable.
+    #   Goodbye." within a second); harmless on older builds
+    return p.spawn([str(exe), "--disable-gpu", "--no-sandbox", *extra_args], log=log)
 
 def pending_update(p: Prefix) -> Path | None:
     f = p.user_dir / "AppData/Local/nativeaccess2-updater/pending/Native-Access-latest.exe"
