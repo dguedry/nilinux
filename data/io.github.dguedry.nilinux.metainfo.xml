@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.12" date="2026-09-12">
+      <description>
+        <p>CI: Flathub linter is advisory; the app ships as a GitHub release bundle only</p>
+      </description>
+    </release>
     <release version="0.1.11" date="2026-09-12">
       <description>
         <p>CI: waive finish-args-host-filesystem-access for the --filesystem=host grant</p>
