@@ -225,10 +225,12 @@ Every operation reports through `progress.Reporter`; the CLI prints steps,
 the GUI maps them onto rows. Wine is Kron4ek's portable
 `wine-11.17-staging-amd64-wow64`, pinned by hash in `wine.py`.
 
-**CI.** Every push and pull request runs Flathub's linter on the manifest
-and metainfo, a Python syntax/import check, and a full Flatpak build of the
-working tree in Flathub's GNOME 50 container; the built bundle
-(`nilinux.flatpak`) is attached to the run as an artifact.
+**CI.** Every push and pull request runs a Python syntax/import check, the
+unit tests, a full Flatpak build of the working tree in the GNOME 50
+container, and a yabridge build for the pinned Wine; the built bundle
+(`nilinux.flatpak`) is attached to the run as an artifact. Flathub's linter
+also runs, advisory only: the app is distributed as a GitHub release bundle,
+not on Flathub, so its permission rules do not gate releases.
 
 **Releasing — automatic.** Every push to `main` publishes a release: CI's
 `auto-tag` job bumps the patch version (`0.1.2` → `0.1.3` → …), adds a metainfo
@@ -243,29 +245,20 @@ commit's subject carries that marker, so there is no release-of-a-release loop.
 or major bump, not the next patch), run `scripts/release.sh 0.2.0 "notes"` — it
 bumps, lints the metainfo, commits, tags and pushes; add `--dry-run` to preview.
 Both paths share `scripts/bump.py`, which edits the package, `pyproject.toml`
-and the metainfo. Flathub is separate either way: after a release, re-pin the
-manifest's `tag`/`commit` to the new version and refresh your Flathub fork by
-hand.
+and the metainfo.
 
 **Flatpak notes.** Wine is downloaded at first run rather than bundled;
 Native Access is neither bundled nor downloaded. Permissions: network,
 X11/PulseAudio, DRI, `--allow=devel` (wine), `--allow=multiarch` (32-bit
-installers), `/tmp` plus `xdg-run/wine` (share the prefix's wineserver socket
-with a host-side yabridge so a DAW's plugins and the app's NTK daemon use one
-wineserver: this wine puts the socket under `/tmp/.wine-<uid>` when `/tmp` is
-real, and the sandbox's private `/tmp` would otherwise split the two), and
-`--filesystem=host`. The last one follows from the shared wineserver: it opens
-every file for every client, so whichever side started it must see everything
-the other side can reach through the prefix -- the `Documents`/`Music`/... links
-Wine makes into the host home, and sample libraries wherever they live. Without
-it, a wineserver started by the app makes Kontakt abort at load in every DAW.
-Installers arrive through the file-chooser portal; NA's default download
-location is pointed at `C:\users\Public\Downloads` when the configured one is
-unset or not writable. `yabridgectl` runs with the host's
-`XDG_CONFIG_HOME`/`XDG_DATA_HOME` because the sandbox remaps them. The app id
-`io.github.dguedry.nilinux` is a placeholder; Flathub needs an id under a domain
-or GitHub account you control, changed consistently in the manifest, desktop
-file, metainfo, icon and `gui.APP_ID`.
+installers), `--talk-name=org.freedesktop.Flatpak` (Wine runs on the host
+through `flatpak-spawn --host`, see *One prefix, many DAWs*), `/tmp` plus
+`xdg-run/wine` (the prefix's wineserver socket lives under `/tmp/.wine-<uid>`
+and the sandbox must find the same one), and `--filesystem=host` so the app's
+own code can reach sample libraries and content wherever they live. Installers
+arrive through the file-chooser portal; NA's default download location is
+pointed at `C:\users\Public\Downloads` when the configured one is unset or not
+writable. `yabridgectl` runs with the host's `XDG_CONFIG_HOME`/`XDG_DATA_HOME`
+because the sandbox remaps them.
 
 ## Tested
 

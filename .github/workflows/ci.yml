@@ -70,9 +70,12 @@ jobs:
   # The build/test jobs always run (push, PR, tag). On the auto-tag path they wait
   # for auto-tag and check out its bump commit so the built bundle carries the new
   # version; otherwise they build whatever ref triggered them.
+  # Advisory only: the app is distributed as a GitHub release bundle, not on
+  # Flathub, so the linter's permission rules do not gate releases.
   lint:
-    name: Flathub linter (manifest, metainfo)
+    name: Flathub linter (manifest, metainfo; advisory)
     needs: [auto-tag]
+    continue-on-error: true
     if: always() && (needs.auto-tag.result == 'success' || needs.auto-tag.result == 'skipped')
     runs-on: ubuntu-latest
     container:
@@ -170,10 +173,9 @@ jobs:
   # version in this run.
   release:
     name: Publish bundle to the GitHub release
-    needs: [auto-tag, lint, python, flatpak, yabridge]
+    needs: [auto-tag, python, flatpak, yabridge]
     if: >-
       always()
-      && needs.lint.result == 'success'
       && needs.python.result == 'success'
       && needs.flatpak.result == 'success'
       && needs.yabridge.result == 'success'
