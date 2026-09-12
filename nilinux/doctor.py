@@ -24,6 +24,11 @@ def run(p: wine.Prefix | None = None) -> list[Check]:
         p = wine.Prefix(paths.PREFIX, b)
     c.append(Check("prefix", p.exists, str(p.path), fix="nilinux setup"))
     if not p.exists: return c
+    scope = p.wineserver_scope()
+    c.append(Check("wineserver reachable from here", scope != "foreign",
+                   {"none": "not running (starts on first use)", "ours": "running in this sandbox",
+                    "foreign": "running outside this sandbox (a DAW's plugin or another instance of this app started it): Native Access cannot use it"}[scope],
+                   fix="close the DAW or the other instance and wait for its wineserver to exit"))
     s = na.status(p)
     c.append(Check("prefix prepared (fonts, C runtime)", s["prepared"], fix="nilinux setup"))
     foreign = p.foreign_dlls()

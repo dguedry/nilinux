@@ -499,10 +499,16 @@ def clear_stale_mutexes(p: Prefix):
         for f in d.rglob("*"):
             if f.is_file(): f.unlink(missing_ok=True)
 
+FOREIGN_WINESERVER = ("The prefix is already running under a wineserver outside this sandbox — a DAW's NI plugin, "
+                      "or another instance of this app, started it. Wine cannot work across that boundary (Native Access "
+                      "would crash and every Wine process would hang). Close the DAW or the other instance, wait a few "
+                      "seconds for its wineserver to exit, then try again.")
+
 def launch(p: Prefix, reporter=None, extra_args=()) -> subprocess.Popen:
     r = null_reporter(reporter)
     exe = na_exe(p)
     if not exe.exists(): raise RuntimeError(f"Native Access is not installed yet — download it from {NA_DOWNLOAD_PAGE} and use install-na")
+    if p.wineserver_scope() == "foreign": raise RuntimeError(FOREIGN_WINESERVER)
     if p.is_running("Native Access.exe"): p.kill_exe("Native Access.exe")
     clear_stale_mutexes(p)
     if stack_patch(exe) == "patched": r.log("re-applied stack patch (NA updated itself)")

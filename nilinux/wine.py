@@ -166,6 +166,20 @@ class Prefix:
                 except OSError: return True
         except OSError: return False
 
+    def wineserver_scope(self) -> str:
+        """Where this prefix's wineserver lives relative to us:
+        'none'    - no wineserver is up for this prefix
+        'ours'    - up, and visible in our /proc (same pid namespace: we can use it)
+        'foreign' - up (holds the lock in /tmp) but not visible here: it runs in
+                    another pid namespace, i.e. another Flatpak instance or the host
+                    (a DAW's plugin through the shim). wineserver addresses its
+                    clients by pid (tgkill, ptrace, process_vm_readv), so a client
+                    from another namespace gets no APCs or suspends: Electron's
+                    renderer dies at once and the server can spin forever."""
+        if not self.wineserver_running(): return "none"
+        if any("wineserver" in cmd for _, cmd in self.processes()): return "ours"
+        return "foreign"
+
     def kill_exe(self, exe_name: str, wait=3.0):
         import signal
         for pid, _ in self.processes(exe_name):
