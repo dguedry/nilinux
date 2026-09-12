@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.10" date="2026-09-12">
+      <description>
+        <p>Run Wine on the host from the sandbox (flatpak-spawn --host, the app's own build)</p>
+      </description>
+    </release>
     <release version="0.1.9" date="2026-09-12">
       <description>
         <p>Refuse to launch NA under a wineserver from another pid namespace; Health check</p>
