@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.11" date="2026-09-12">
+      <description>
+        <p>CI: waive finish-args-host-filesystem-access for the --filesystem=host grant</p>
+      </description>
+    </release>
     <release version="0.1.10" date="2026-09-12">
       <description>
         <p>Run Wine on the host from the sandbox (flatpak-spawn --host, the app's own build)</p>
