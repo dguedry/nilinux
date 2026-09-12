@@ -109,19 +109,35 @@ holds the ports talks to the wrong daemon and hangs in every host. Several
 nilinux prefixes appear easily: the source install (`~/.local/share/nilinux`),
 the Flatpak (`~/.var/app/<id>/data/nilinux`), an older Flatpak app id.
 
-The rule is simple: **the nilinux you run owns the bridges.** `sync` registers
-this prefix's plugin directories with yabridgectl and removes those of other
-nilinux prefixes (third-party prefixes you added yourself are left alone).
-Health reports:
+**Wine runs on the host, even from the Flatpak.** wineserver addresses its
+clients by pid (`tgkill`, `ptrace`, `process_vm_readv`). Every `flatpak run`
+is its own pid namespace and the host is another; a wineserver started in one
+namespace cannot serve a client in another: Native Access's renderer dies at
+once, Chromium's process broker fails, and the server can spin at 100% CPU
+with every Wine process hung. DAWs load NI plugins on the host, so the prefix's
+wineserver has to live on the host, and therefore so does every Wine process
+this app starts: the sandbox runs them with `flatpak-spawn --host` (portal
+permission `org.freedesktop.Flatpak`). The binary is always the app's own
+pinned Wine build under the app's data directory, never the distribution's
+wine, so the prefix, Native Access, the NI installers and the DAW-side plugin
+hosts (through the `~/.local/bin/wine` shim) all run one and the same Wine in
+one and the same namespace. Health's first check, *Wine runs on the host*,
+verifies that the portal is reachable.
+
+`sync` registers this prefix's plugin directories with yabridgectl and removes
+those of other nilinux prefixes (third-party prefixes you added yourself are
+left alone). Health checks:
 
 - *NTK Daemon ports free or ours* — names the prefix whose daemon actually
   holds the ports (read from the listener's `WINEPREFIX`), not a guess;
+- *wineserver reachable from here* — the prefix's wineserver is one this app
+  can talk to (not one from a pid namespace it cannot reach);
 - *single nilinux prefix* — lists other nilinux prefixes on the machine;
 - *yabridge lists only this prefix*, *bridged plugins point at existing files*.
 
 `nilinux prefixes` prints the same overview on the command line. After
 switching prefixes, rescan plugins in your DAW: its plugin list still holds
-the old entries until then.
+the old paths until then.
 
 ## yabridge and Wine versions
 
@@ -175,7 +191,7 @@ Each of these was diagnosed from a real failure.
 | NI app installers fail ("Setup has failed: FALSE") | InstallAware queries an MSI virtual table Wine's SQL parser rejects | Runs the installer silently under an MSI trace; if it fails, deploys the payload from the trace's destination map and writes the registry keys |
 | Library installed but invisible in Kontakt | Daemon skipped the HKLM key Kontakt scans | Writes `ContentDir`/`HU`/`JDX` from the daemon's record and NI's catalogue |
 | NI apps freeze each other | Boost named mutexes are not crash-safe | Clears stale mutex files when no NI app runs |
-| Native Access quits within a second of starting ("GPU process launch failed: error_code=39", "Network service crashed", "GPU process isn't usable. Goodbye."), or its renderer dies at once (`render-process-gone`, exit 258) and the wineserver then spins at 100% CPU with every Wine process hung; a Kontakt loaded in a DAW dies the same way when the app started the wineserver | The prefix's wineserver was started in a different **pid namespace** from the client: by a DAW's plugin on the host (through the shim) or by another instance of this app, while each `flatpak run` is its own namespace. wineserver addresses clients by pid (`tgkill`, `ptrace`, `process_vm_readv`), so such a client never gets its APCs or thread suspends | Health check *wineserver reachable from here*; `launch` refuses with an explanation instead of crashing. Until the wineserver itself runs on the host (see *One prefix, many DAWs*), close the DAW before opening Native Access and close this app before loading NI plugins in a DAW. `--no-sandbox` is kept as well |
+| Native Access quits within a second of starting ("GPU process launch failed: error_code=39", "Network service crashed", "GPU process isn't usable. Goodbye."), or its renderer dies at once (`render-process-gone`, exit 258) and the wineserver then spins at 100% CPU with every Wine process hung; a Kontakt loaded in a DAW dies the same way when the app started the wineserver | The prefix's wineserver ran in a different **pid namespace** from the client: started by a DAW's plugin on the host while the app ran in its sandbox, or by another `flatpak run` instance. wineserver addresses clients by pid (`tgkill`, `ptrace`, `process_vm_readv`), so such a client never gets its APCs or thread suspends | Wine runs on the host for the sandbox too (`flatpak-spawn --host`, the app's own build), so server and every client share the host namespace; Health checks *Wine runs on the host* and *wineserver reachable from here*; `launch` refuses instead of crashing if a server it cannot reach holds the prefix; `--no-sandbox` kept as well |
 | Every NI application install fails instantly in the Flatpak (daemon error 731; any 32-bit program: "Application could not be started") | Flatpak's seccomp filter blocks `modify_ldt`, which Wine's WoW64 layer needs for 32-bit code; NI's InstallAware setup exes are 32-bit | Manifest grants `--allow=multiarch`; Health checks that a 32-bit program runs |
 | Every download fails ("Download folder does not exist", "could not create new file") | A fresh prefix has no download location; Wine's `Downloads` folder is a symlink to the host's, which the sandbox mounts read-only | Points NA at `C:\users\Public\Downloads` inside the prefix whenever the configured location is unset or not writable (checked at setup and on every launch; a working custom location is kept) |
 | Plugins refuse to load in a DAW ("prefix updated by a newer Wine") | Host wine older than the prefix's wine | One wine binary for both: setup installs a `~/.local/bin/wine` shim that routes the app's prefix to the app's wine and every other prefix to the host's; plugins are not bridged until it is active |

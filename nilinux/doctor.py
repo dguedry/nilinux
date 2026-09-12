@@ -2,7 +2,7 @@
 import shutil, subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from . import paths, wine, native_access as na, yabridge, products, prefixes
+from . import paths, wine, native_access as na, yabridge, products, prefixes, host
 
 @dataclass
 class Check:
@@ -24,10 +24,13 @@ def run(p: wine.Prefix | None = None) -> list[Check]:
         p = wine.Prefix(paths.PREFIX, b)
     c.append(Check("prefix", p.exists, str(p.path), fix="nilinux setup"))
     if not p.exists: return c
+    hok, hdetail = host.available()
+    c.append(Check("Wine runs on the host", hok, hdetail, fix="reinstall the current Flatpak build (it grants the org.freedesktop.Flatpak portal)"))
+    if not hok: return c
     scope = p.wineserver_scope()
     c.append(Check("wineserver reachable from here", scope != "foreign",
-                   {"none": "not running (starts on first use)", "ours": "running in this sandbox",
-                    "foreign": "running outside this sandbox (a DAW's plugin or another instance of this app started it): Native Access cannot use it"}[scope],
+                   {"none": "not running (starts on first use)", "ours": "running on the host, reachable from here",
+                    "foreign": "running in a pid namespace this app cannot reach (a sandboxed DAW with its own Wine?): Native Access cannot use it"}[scope],
                    fix="close the DAW or the other instance and wait for its wineserver to exit"))
     s = na.status(p)
     c.append(Check("prefix prepared (fonts, C runtime)", s["prepared"], fix="nilinux setup"))

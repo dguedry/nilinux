@@ -21,6 +21,7 @@ wrong daemon and hangs in every DAW. The rules that keep this consistent:
 import os, re, socket
 from pathlib import Path
 from .wine import Prefix
+from . import host
 
 PREFIX_RE = re.compile(r"^(.*/nilinux/prefix)(?:/drive_c(?:/.*)?)?/?$")
 
@@ -102,19 +103,29 @@ def _listeners(ports: tuple[int, ...]) -> dict[int, int]:
         if port in ports: out[port] = int(f[9])
     return out
 
-def _pid_for_inode(inode: int) -> int | None:
+_HOLDER_SCAN = r"""for p in /proc/[0-9]*; do
+  for fd in "$p"/fd/*; do
+    [ "$(readlink "$fd" 2>/dev/null)" = "socket:[$NILINUX_INODE]" ] || continue
+    printf '%s\t%s\t%s\t' "${p#/proc/}" "$(cat "$p/comm" 2>/dev/null)" "$(tr '\0' '\n' < "$p/environ" 2>/dev/null | grep '^WINEPREFIX=' | head -1 | cut -d= -f2-)"
+    tr '\0' ' ' < "$p/cmdline" 2>/dev/null; echo; break
+  done
+done"""
+
+def _socket_holders(inode: int) -> list[dict]:
+    """Processes holding this socket, host-wide: [{'pid', 'comm', 'prefix', 'cmd'}]."""
+    out = []
+    for line in host.sh(_HOLDER_SCAN, env={"NILINUX_INODE": str(inode)}, timeout=120).splitlines():
+        parts = line.split("\t", 3)
+        if len(parts) == 4 and parts[0].isdigit():
+            out.append({"pid": int(parts[0]), "comm": parts[1], "prefix": parts[2], "cmd": parts[3].strip()})
+    return out
+
+def _pid_for_inode(inode: int) -> dict | None:
     """A process holding this socket. Wine sockets are shared by wineserver and the
     Windows process that owns them; prefer the latter for a meaningful name."""
-    want = f"socket:[{inode}]"
-    holders = []
-    for pid_dir in Path("/proc").iterdir():
-        if not pid_dir.name.isdigit(): continue
-        try:
-            for fd in (pid_dir / "fd").iterdir():
-                if os.readlink(fd) == want: holders.append(int(pid_dir.name)); break
-        except OSError: continue
+    holders = _socket_holders(inode)
     if not holders: return None
-    named = [h for h in holders if "wineserver" not in _cmdline(h)]
+    named = [h for h in holders if "wineserver" not in h["cmd"]]
     return (named or holders)[0]
 
 def ntk_port_owner(ports: tuple[int, ...]) -> dict:
@@ -130,23 +141,24 @@ def ntk_port_owner(ports: tuple[int, ...]) -> dict:
                 try: sk.bind(("127.0.0.1", port))
                 except OSError: busy.append(port)
         return {"busy": busy, "pid": None, "prefix": None, "exe": ""}
-    pid = None
+    h = None
     for port in busy:
-        pid = _pid_for_inode(inodes[port])
-        if pid is not None: break
-    env = _environ(pid) if pid else {}
-    return {"busy": busy, "pid": pid, "prefix": env.get("WINEPREFIX") or None, "exe": _comm(pid) if pid else ""}
+        h = _pid_for_inode(inodes[port])
+        if h is not None: break
+    if h is None: return {"busy": busy, "pid": None, "prefix": None, "exe": ""}
+    return {"busy": busy, "pid": h["pid"], "prefix": h["prefix"] or None, "exe": h["comm"]}
+
+_WINESERVER_SCAN = r"""for p in /proc/[0-9]*; do
+  [ "$(cat "$p/comm" 2>/dev/null)" = wineserver ] || continue
+  printf '%s\t%s\n' "${p#/proc/}" "$(tr '\0' '\n' < "$p/environ" 2>/dev/null | grep '^WINEPREFIX=' | head -1 | cut -d= -f2-)"
+done"""
 
 def wineservers() -> list[dict]:
-    """Running wineservers: [{'pid', 'prefix'}]."""
+    """Running wineservers, host-wide: [{'pid', 'prefix'}]."""
     out = []
-    for pid_dir in Path("/proc").iterdir():
-        if not pid_dir.name.isdigit(): continue
-        try: comm = (pid_dir / "comm").read_text().strip()
-        except OSError: continue
-        if comm != "wineserver": continue
-        pid = int(pid_dir.name)
-        out.append({"pid": pid, "prefix": _environ(pid).get("WINEPREFIX", "")})
+    for line in host.sh(_WINESERVER_SCAN).splitlines():
+        pid, _, prefix = line.partition("\t")
+        if pid.isdigit(): out.append({"pid": int(pid), "prefix": prefix.strip()})
     return out
 
 def report(p: Prefix, ports: tuple[int, ...], status_text: str = "") -> str:

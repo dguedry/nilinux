@@ -1,5 +1,6 @@
 {
   "io.github.dguedry.nilinux": [
-    "finish-args-host-tmp-access"
+    "finish-args-host-tmp-access",
+    "finish-args-flatpak-spawn-access"
   ]
 }

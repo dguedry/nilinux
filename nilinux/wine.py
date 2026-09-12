@@ -7,7 +7,7 @@ host wine drift apart.
 """
 import os, re, shutil, subprocess, tarfile, time
 from pathlib import Path
-from . import paths
+from . import paths, host
 from .progress import null_reporter
 
 # Pinned build. Kron4ek's builds are portable (built against old glibc) and
@@ -75,33 +75,43 @@ class Prefix:
     @property
     def exists(self) -> bool: return (self.drive_c / "windows").exists()
 
-    def env(self, extra: dict | None = None, debug="-all") -> dict:
-        e = dict(os.environ)
-        e.update({
+    def wine_env(self, extra: dict | None = None, debug="-all") -> dict:
+        """Only the variables Wine needs: these are added to the *host* session
+        environment when the sandbox runs Wine through flatpak-spawn (see host.py)."""
+        e = {
             "WINEPREFIX": str(self.path), "WINEFSYNC": "1", "WINEDEBUG": debug,
             # no .desktop spam; no Wine Mono / Gecko install prompts (nothing NI ships needs .NET or IE)
             "WINEDLLOVERRIDES": "winemenubuilder.exe=d;mscoree=d;mshtml=d",
             "WINEARCH": "win64",
-        })
-        # keep our wine first so anything that shells out to `wine` (yabridge) agrees
-        e["PATH"] = f"{self.build.root / 'bin'}:{e.get('PATH', '')}"
+        }
         if extra: e.update(extra)
+        return e
+
+    def env(self, extra: dict | None = None, debug="-all") -> dict:
+        """Full environment for tools that run *in the sandbox* and shell out to
+        `wine` themselves (yabridgectl): ours first on PATH."""
+        e = dict(os.environ); e.update(self.wine_env(extra, debug))
+        e["PATH"] = f"{self.build.root / 'bin'}:{e.get('PATH', '')}"
         return e
 
     def run(self, args: list[str], *, timeout=600, capture=True, env: dict | None = None,
             debug="-all", cwd=None, stderr_to=None) -> subprocess.CompletedProcess:
-        """Run a Windows program in the prefix and wait."""
-        kw = dict(env=self.env(env, debug), timeout=timeout, cwd=cwd)
+        """Run a Windows program in the prefix and wait. Wine runs on the host
+        (one pid namespace with DAW plugins), see host.py."""
+        kw = dict(timeout=timeout)
         if stderr_to is not None:
             with open(stderr_to, "wb") as f:
-                return subprocess.run([str(self.build.wine), *args], stdout=subprocess.DEVNULL, stderr=f, **kw)
-        return subprocess.run([str(self.build.wine), *args], capture_output=capture, text=capture, **kw)
+                return host.run([str(self.build.wine), *args], env=self.wine_env(env, debug), cwd=cwd,
+                                stdout=subprocess.DEVNULL, stderr=f, **kw)
+        return host.run([str(self.build.wine), *args], env=self.wine_env(env, debug), cwd=cwd,
+                        capture_output=capture, text=capture, **kw)
 
     def spawn(self, args: list[str], *, env: dict | None = None, log: Path | None = None) -> subprocess.Popen:
-        """Start a Windows program detached (GUI apps)."""
+        """Start a Windows program detached (GUI apps). The returned process ends
+        when the program does (flatpak-spawn waits for its host command)."""
         out = open(log, "ab") if log else subprocess.DEVNULL
-        return subprocess.Popen([str(self.build.wine), *args], env=self.env(env), stdout=out, stderr=out,
-                                stdin=subprocess.DEVNULL, start_new_session=True)
+        return host.popen([str(self.build.wine), *args], env=self.wine_env(env), stdout=out, stderr=out,
+                          stdin=subprocess.DEVNULL, start_new_session=True)
 
     # -- lifecycle ---------------------------------------------------------------
     def create(self, reporter=None, windows_version="win10"):
@@ -115,26 +125,28 @@ class Prefix:
 
     def wait_idle(self, timeout=120):
         """Wait for wineserver to exit so registry hives are flushed."""
-        try: subprocess.run([str(self.build.wineserver), "-w"], env=self.env(), timeout=timeout)
+        try: host.run([str(self.build.wineserver), "-w"], env=self.wine_env(), timeout=timeout)
         except subprocess.TimeoutExpired: pass
 
     def kill(self):
-        subprocess.run([str(self.build.wineserver), "-k"], env=self.env(), timeout=60)
+        host.run([str(self.build.wineserver), "-k"], env=self.wine_env(), timeout=60)
+
+    # /proc is scanned on the host: the sandbox's /proc shows only the sandbox,
+    # and every Wine process of ours now lives on the host.
+    PROC_SCAN = r"""for p in /proc/[0-9]*; do
+  tr '\0' '\n' < "$p/environ" 2>/dev/null | grep -qxF -- "WINEPREFIX=$NILINUX_PREFIX" || continue
+  printf '%s\t' "${p#/proc/}"; tr '\0' ' ' < "$p/cmdline" 2>/dev/null; echo
+done"""
 
     def processes(self, exe_name: str | None = None) -> list[tuple[int, str]]:
-        """(pid, cmdline) of Windows processes running in *this* prefix
-        (matched by WINEPREFIX in /proc/<pid>/environ)."""
+        """(pid, cmdline) of processes running with *this* prefix (WINEPREFIX in
+        their environment), host-wide."""
         out = []
-        want = f"WINEPREFIX={self.path}".encode()
-        for pid_dir in Path("/proc").iterdir():
-            if not pid_dir.name.isdigit(): continue
-            try:
-                env = (pid_dir / "environ").read_bytes()
-                if want not in env.split(b"\0"): continue
-                cmd = (pid_dir / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace").strip()
-            except OSError: continue
-            if exe_name is None or exe_name.lower() in cmd.lower():
-                out.append((int(pid_dir.name), cmd))
+        for line in host.sh(self.PROC_SCAN, env={"NILINUX_PREFIX": str(self.path)}).splitlines():
+            pid, _, cmd = line.partition("\t")
+            if not pid.isdigit(): continue
+            cmd = cmd.strip()
+            if exe_name is None or exe_name.lower() in cmd.lower(): out.append((int(pid), cmd))
         return out
 
     def is_running(self, exe_name: str) -> bool:
@@ -170,21 +182,20 @@ class Prefix:
         """Where this prefix's wineserver lives relative to us:
         'none'    - no wineserver is up for this prefix
         'ours'    - up, and visible in our /proc (same pid namespace: we can use it)
-        'foreign' - up (holds the lock in /tmp) but not visible here: it runs in
-                    another pid namespace, i.e. another Flatpak instance or the host
-                    (a DAW's plugin through the shim). wineserver addresses its
-                    clients by pid (tgkill, ptrace, process_vm_readv), so a client
-                    from another namespace gets no APCs or suspends: Electron's
-                    renderer dies at once and the server can spin forever."""
+        'foreign' - up (holds the lock in /tmp) but not found by the host-wide
+                    scan: it runs in a pid namespace we cannot reach (a sandboxed
+                    DAW with its own Wine?). wineserver addresses its clients by
+                    pid (tgkill, ptrace, process_vm_readv), so a client from
+                    another namespace gets no APCs or suspends: Electron's renderer
+                    dies at once and the server can spin forever. Our own Wine runs
+                    on the host for exactly this reason (host.py)."""
         if not self.wineserver_running(): return "none"
         if any("wineserver" in cmd for _, cmd in self.processes()): return "ours"
         return "foreign"
 
     def kill_exe(self, exe_name: str, wait=3.0):
-        import signal
-        for pid, _ in self.processes(exe_name):
-            try: os.kill(pid, signal.SIGTERM)
-            except OSError: pass
+        pids = [str(pid) for pid, _ in self.processes(exe_name)]
+        if pids: host.run(["kill", "-TERM", *pids], capture_output=True, timeout=20)
         time.sleep(wait)
 
     # -- integrity -------------------------------------------------------------------

@@ -499,10 +499,10 @@ def clear_stale_mutexes(p: Prefix):
         for f in d.rglob("*"):
             if f.is_file(): f.unlink(missing_ok=True)
 
-FOREIGN_WINESERVER = ("The prefix is already running under a wineserver outside this sandbox — a DAW's NI plugin, "
-                      "or another instance of this app, started it. Wine cannot work across that boundary (Native Access "
-                      "would crash and every Wine process would hang). Close the DAW or the other instance, wait a few "
-                      "seconds for its wineserver to exit, then try again.")
+FOREIGN_WINESERVER = ("The prefix is already running under a wineserver this app cannot reach (started in another pid "
+                      "namespace, e.g. by a sandboxed DAW with its own Wine). Wine cannot work across that boundary (Native "
+                      "Access would crash and every Wine process would hang). Close that program, wait a few seconds for "
+                      "its wineserver to exit, then try again.")
 
 def launch(p: Prefix, reporter=None, extra_args=()) -> subprocess.Popen:
     r = null_reporter(reporter)
