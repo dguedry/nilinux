@@ -11,6 +11,12 @@ wrong daemon and hangs in every DAW. The rules that keep this consistent:
   prefixes' directories from yabridgectl (third-party prefixes are left alone)
 - Health names the prefix whose daemon holds the ports, by reading the
   listener's WINEPREFIX, instead of guessing from "our wineserver is up"
+- the Flatpak sandbox must see every path Wine reaches through the prefix:
+  wineserver opens files for every client, and whichever side started it
+  (the app in its sandbox, or a DAW's yabridge on the host) serves the other.
+  Wine links the prefix's Documents/Music/... to the host home; a sandbox
+  without that view makes Kontakt abort at load in every DAW. sandbox_gaps()
+  lists what the sandbox cannot see.
 """
 import os, re, socket
 from pathlib import Path
@@ -158,3 +164,75 @@ def report(p: Prefix, ports: tuple[int, ...], status_text: str = "") -> str:
         foreign = foreign_yabridge_dirs(p, status_text)
         lines.append("yabridgectl:    " + (f"{len(foreign)} directories of other nilinux prefixes (nilinux sync removes them)" if foreign else "only this prefix's directories"))
     return "\n".join(lines)
+
+
+# --- Flatpak sandbox view ------------------------------------------------------------
+FLATPAK_INFO = Path("/.flatpak-info")
+XDG_DIRS = {"xdg-desktop": "Desktop", "xdg-documents": "Documents", "xdg-download": "Downloads",
+            "xdg-music": "Music", "xdg-pictures": "Pictures", "xdg-videos": "Videos",
+            "xdg-templates": "Templates", "xdg-publicshare": "Public"}
+
+def flatpak_filesystems(info: Path = FLATPAK_INFO) -> list[str] | None:
+    """The sandbox's ``filesystems=`` grants from /.flatpak-info, or None when not
+    running under Flatpak."""
+    if not info.exists(): return None
+    for line in info.read_text(errors="ignore").splitlines():
+        if line.startswith("filesystems="):
+            return [x for x in line[len("filesystems="):].split(";") if x]
+    return []
+
+def _under(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
+
+def sandbox_sees(path: Path, filesystems: list[str], home: Path | None = None) -> bool:
+    """Whether a host path is visible inside a sandbox with these grants. The app's
+    own data dir (~/.var/app/<id>) is always mounted."""
+    home = home or Path.home(); path = Path(path)
+    if _under(path, home / ".var" / "app"): return True
+    for fs in filesystems:
+        name = fs.split(":")[0]
+        if name == "host": return True
+        if name == "home":
+            if _under(path, home): return True
+            continue
+        if name in XDG_DIRS: root = home / XDG_DIRS[name]
+        elif name.startswith("xdg-run/"): root = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")) / name[len("xdg-run/"):]
+        elif name.startswith("~/"): root = home / name[2:]
+        elif name.startswith("/"): root = Path(name)
+        else: continue
+        if _under(path, root): return True
+    return False
+
+def _unix_path(p: Prefix, win: str) -> Path | None:
+    """C:\\... -> drive_c/..., Z:\\... -> /...; other drive letters are unknown here."""
+    if len(win) < 3 or win[1:3] != ":\\": return None
+    rest = win[3:].replace("\\", "/")
+    if win[0].upper() == "C": return p.drive_c / rest
+    if win[0].upper() == "Z": return Path("/") / rest
+    return None
+
+def host_paths_wine_opens(p: Prefix) -> dict[str, Path]:
+    """Places outside the prefix that Wine reaches through it: the user folders Wine
+    symlinks to the host home (Desktop, Documents, Music, ...) and library
+    ContentDirs on other drives. Keys are Windows paths, values host paths."""
+    out: dict[str, Path] = {}
+    users = p.user_dir
+    if users.exists():
+        for entry in sorted(users.iterdir()):
+            if entry.is_symlink():
+                out[f"C:\\users\\{users.name}\\{entry.name}"] = Path(os.path.realpath(entry))
+    from . import products
+    for vals in products.hive_keys(p).values():
+        u = _unix_path(p, vals.get("ContentDir", ""))
+        if u is not None and not _under(u, p.path):
+            out[vals["ContentDir"]] = Path(os.path.realpath(u))
+    return out
+
+def sandbox_gaps(p: Prefix, filesystems: list[str] | None = None, home: Path | None = None) -> list[str]:
+    """Paths Wine reaches through this prefix that the Flatpak sandbox cannot see;
+    empty outside Flatpak. A wineserver started from such a sandbox fails every
+    client's open on them with "no such file": Kontakt aborts at load in every DAW."""
+    if filesystems is None: filesystems = flatpak_filesystems()
+    if filesystems is None: return []
+    return [f"{win} -> {unix}" for win, unix in host_paths_wine_opens(p).items()
+            if not sandbox_sees(unix, filesystems, home)]

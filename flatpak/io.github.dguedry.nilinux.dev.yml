@@ -26,10 +26,19 @@ finish-args:
   - --filesystem=~/.local/bin:create
   - --filesystem=~/.config/yabridgectl:create
   - --filesystem=~/.config/environment.d:create   # "Make DAWs use this wine" (WINELOADER)
-  # Installers the user picks come through the file-chooser portal, so no grant on
-  # ~/Downloads is needed. Deliberately NOT granting it: with it, Wine turns the
-  # prefix's Downloads folder into a symlink to the read-only host folder and NI's
-  # daemon has no writable default download location ("Download folder does not exist").
+  # The prefix's wineserver is shared with host DAWs (below), and wineserver opens
+  # every file on behalf of every client. So whatever a plugin can reach through
+  # the prefix must be visible from inside this sandbox too: Wine links the
+  # prefix's Desktop/Documents/Downloads/Music/... to the host's folders (Kontakt
+  # keeps its Service Center data under Documents and aborts at load when that
+  # open fails with "no such file"), and sample libraries live wherever the user
+  # put them. Anything narrower than host access breaks plugins in every DAW the
+  # moment this app is the one that started the wineserver. Health ("sandbox sees
+  # every path the prefix links to") reports what is missing.
+  - --filesystem=host
+  # Installers the user picks still come through the file-chooser portal. NA's
+  # default download location is pointed at C:\users\Public\Downloads whenever the
+  # configured one is unset or not writable (checked at setup and every launch).
   # wineserver's per-prefix socket must be the SAME file the host's wine sees, so
   # a DAW's yabridge (host) and this app's daemon (sandbox) share ONE wineserver
   # for the prefix. This wine build puts that socket under /tmp/.wine-<uid> when

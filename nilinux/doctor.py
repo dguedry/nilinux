@@ -83,6 +83,12 @@ def run(p: wine.Prefix | None = None) -> list[Check]:
     c.append(Check("single nilinux prefix", not others,
                    "" if not others else "also: " + ", ".join(prefixes.short(o) for o in others) + " -- only one can own the NI daemon; sync keeps the bridges on this one",
                    fix="delete the other prefix folders once you are sure this one is the install to keep"))
+    if prefixes.flatpak_filesystems() is not None:
+        gaps = prefixes.sandbox_gaps(p)
+        c.append(Check("sandbox sees every path the prefix links to", not gaps,
+                       "" if not gaps else "invisible from this sandbox: " + ", ".join(gaps)
+                       + " -- when this app starts the prefix's wineserver, host DAW plugins cannot open them (Kontakt aborts at load)",
+                       fix="flatpak override --user --filesystem=host io.github.dguedry.nilinux (the current manifest grants it; reinstall the app)"))
     ystat = yabridge.status(p)
     foreign = prefixes.foreign_yabridge_dirs(p, ystat)
     c.append(Check("yabridge lists only this prefix", not foreign,

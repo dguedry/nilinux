@@ -183,6 +183,7 @@ Each of these was diagnosed from a real failure.
 | Plugins hang in every DAW; Health shows the NTK ports held by another prefix | Two nilinux prefixes (Flatpak and source install, or an old app id) both bridged; the daemon that owns the ports belongs to the other one | `sync` unregisters other nilinux prefixes' directories; Health names the daemon's prefix from the listener's `WINEPREFIX`; `nilinux prefixes` shows the whole picture |
 | A plugin vanished after Native Access updated it; the bridge link points at a missing file | NA's InstallAware update removed the old files and died before deploying the new ones | Finishes the install from the staged payload / kept download after NA exits, or via *Finish interrupted installs* |
 | After a DAW session, NI installers die instantly ("Cannot create temporary folder" style dialogs, daemon error 731) | A DAW's yabridge ran the *host* wine on the prefix, whose prefix update replaced the built-in DLLs with another version's | Health compares built-in DLLs with the app's wine; setup re-runs the prefix update with the right wine (native C runtime files are kept) |
+| Kontakt (or another NI plugin) aborts while loading in every DAW right after the Flatpak app was used, and Native Access cannot see or write its download folder | wineserver opens files for every client, and the app's sandbox had started the prefix's wineserver without being able to see the host folders the prefix's `Documents`/`Music`/`Downloads`/... links point to (Kontakt keeps its Service Center data under Documents) | The Flatpak asks for `--filesystem=host`; Health ("sandbox sees every path the prefix links to") lists anything the sandbox still cannot see |
 
 The `app.asar` patches recompute the archive's per-file integrity and the
 header hash stored in the exe (NA ships with Electron's asar-integrity fuse
@@ -233,15 +234,18 @@ hand.
 **Flatpak notes.** Wine is downloaded at first run rather than bundled;
 Native Access is neither bundled nor downloaded. Permissions: network,
 X11/PulseAudio, DRI, `--allow=devel` (wine), `--allow=multiarch` (32-bit
-installers), the yabridge directories under `~`, and `/tmp` plus `xdg-run/wine`
-(share the prefix's wineserver socket with a host-side yabridge so a DAW's
-plugins and the app's NTK daemon use one wineserver: this wine puts the socket
-under `/tmp/.wine-<uid>` when `/tmp` is real, and the sandbox's private `/tmp`
-would otherwise split the two). Installers
-arrive through the file-chooser portal, so the app has no grant on
-`~/Downloads`: granting it would make Wine symlink the prefix's Downloads
-folder to the read-only host folder, and NI's daemon would have no writable
-default download location. `yabridgectl` runs with the host's
+installers), `/tmp` plus `xdg-run/wine` (share the prefix's wineserver socket
+with a host-side yabridge so a DAW's plugins and the app's NTK daemon use one
+wineserver: this wine puts the socket under `/tmp/.wine-<uid>` when `/tmp` is
+real, and the sandbox's private `/tmp` would otherwise split the two), and
+`--filesystem=host`. The last one follows from the shared wineserver: it opens
+every file for every client, so whichever side started it must see everything
+the other side can reach through the prefix -- the `Documents`/`Music`/... links
+Wine makes into the host home, and sample libraries wherever they live. Without
+it, a wineserver started by the app makes Kontakt abort at load in every DAW.
+Installers arrive through the file-chooser portal; NA's default download
+location is pointed at `C:\users\Public\Downloads` when the configured one is
+unset or not writable. `yabridgectl` runs with the host's
 `XDG_CONFIG_HOME`/`XDG_DATA_HOME` because the sandbox remaps them. The app id
 `io.github.dguedry.nilinux` is a placeholder; Flathub needs an id under a domain
 or GitHub account you control, changed consistently in the manifest, desktop
