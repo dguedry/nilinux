@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.9" date="2026-09-12">
+      <description>
+        <p>Refuse to launch NA under a wineserver from another pid namespace; Health check</p>
+      </description>
+    </release>
     <release version="0.1.8" date="2026-09-11">
       <description>
         <p>Native Access 3.26.0 is validated; keep --no-sandbox and the known-bad mechanism</p>
