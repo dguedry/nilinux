@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.17" date="2026-09-13">
+      <description>
+        <p>Programs: Electron apps launch with --disable-gpu (blank window, "not responding")</p>
+      </description>
+    </release>
     <release version="0.1.16" date="2026-09-13">
       <description>
         <p>Programs: derive the install directory from the launcher when the registry has none</p>
