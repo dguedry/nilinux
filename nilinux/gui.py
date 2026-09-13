@@ -4,7 +4,7 @@ from pathlib import Path
 import gi
 gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk, Gio
-from . import __version__, paths, wine, native_access as na, products, yabridge, doctor
+from . import __version__, paths, wine, native_access as na, products, yabridge, doctor, programs
 from .progress import Reporter, OK, FAIL, SKIP, RUN
 
 APP_ID = "io.github.dguedry.nilinux"
@@ -58,6 +58,7 @@ class Window(Adw.ApplicationWindow):
         header.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu))
         tv.add_top_bar(header); tv.set_content(self.stack)
         self.stack.add_titled_with_icon(self.build_plugins(), "plugins", "Plugins", "audio-x-generic-symbolic")
+        self.stack.add_titled_with_icon(self.build_programs(), "programs", "Programs", "application-x-executable-symbolic")
         self.stack.add_titled_with_icon(self.build_install(), "install", "Install", "list-add-symbolic")
         self.stack.add_titled_with_icon(self.build_health(), "health", "Health", "emblem-ok-symbolic")
         self.task = TaskPage("Working"); self.stack.add_titled_with_icon(self.task, "task", "Progress", "content-loading-symbolic")
@@ -164,6 +165,50 @@ class Window(Adw.ApplicationWindow):
             ui(show)
         threading.Thread(target=work, daemon=True).start()
 
+    # ---- programs page ------------------------------------------------------------------
+    def build_programs(self):
+        page = Adw.PreferencesPage()
+        self.programs_group = Adw.PreferencesGroup(title="Installed programs", description="Everything with an installer record or a Start Menu shortcut in the prefix. Run starts it with the app's Wine; Uninstall runs its own uninstaller.")
+        page.add(self.programs_group); self._rows[self.programs_group] = []
+        g = Adw.PreferencesGroup(title="Install", description=programs.LIMITS)
+        r = Adw.ActionRow(title="Install a Windows program", subtitle="Pick a .exe or .msi installer; its own window opens. Plugins it installs are bridged when it finishes.", activatable=True)
+        r.add_suffix(Gtk.Image(icon_name="document-open-symbolic")); r.connect("activated", lambda *_: self.pick_file("Choose installer (.exe or .msi)", self.install_program, downloads=True)); g.add(r)
+        r = Adw.ActionRow(title="Refresh the list", activatable=True)
+        r.add_suffix(Gtk.Image(icon_name="view-refresh-symbolic")); r.connect("activated", lambda *_: self.refresh_programs()); g.add(r)
+        page.add(g)
+        return page
+    def refresh_programs(self):
+        if not self.is_ready(): return
+        def work():
+            progs = programs.installed(self.prefix)
+            def show():
+                rows = []
+                for x in progs:
+                    sub = " · ".join(s for s in (x.version, x.publisher, x.exe or "no launcher known (uninstall only)") if s)
+                    row = Adw.ActionRow(title=GLib.markup_escape_text(x.name), subtitle=GLib.markup_escape_text(sub))
+                    if x.exe:
+                        b = Gtk.Button(icon_name="media-playback-start-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Run", css_classes=["flat"])
+                        b.connect("clicked", lambda *_, prog=x: self.run_program(prog)); row.add_suffix(b)
+                    if x.uninstall:
+                        b = Gtk.Button(icon_name="user-trash-symbolic", valign=Gtk.Align.CENTER, tooltip_text="Uninstall", css_classes=["flat"])
+                        b.connect("clicked", lambda *_, prog=x: self.uninstall_program(prog)); row.add_suffix(b)
+                    rows.append(row)
+                if not rows: rows.append(Adw.ActionRow(title="No programs found", subtitle="Install one below, or run a plugin installer from the Install tab"))
+                self._fill(self.programs_group, rows)
+            ui(show)
+        threading.Thread(target=work, daemon=True).start()
+    def run_program(self, prog):
+        try: programs.run(self.prefix, prog); self.toast(f"{prog.name} is starting…")
+        except Exception as e: self.toast(str(e))
+    def uninstall_program(self, prog):
+        def fn(r):
+            programs.uninstall(self.prefix, prog, r); yabridge.sync(self.prefix, r)
+        self.run_bg(f"Uninstalling {prog.name}", fn, done=self.refresh_programs)
+    def install_program(self, path):
+        def fn(r):
+            programs.install(self.prefix, path, r); return yabridge.sync(self.prefix, r)
+        self.run_bg(f"Installing {path.name}", fn, done=self.refresh_programs)
+
     # ---- install page -------------------------------------------------------------------
     def build_install(self):
         page = Adw.PreferencesPage()
@@ -268,15 +313,15 @@ class Window(Adw.ApplicationWindow):
                 elif v["installed"]: self.na_update_row.set_subtitle(f"Installed {v['installed']} (current). Pick Native-Access-latest.exe from your Downloads folder to reinstall.")
             ui(show)
         threading.Thread(target=work, daemon=True).start()
-    def refresh_all(self): self.refresh_plugins(); self.refresh_health(); self.refresh_version_notice()
+    def refresh_all(self): self.refresh_plugins(); self.refresh_programs(); self.refresh_health(); self.refresh_version_notice()
 
 class App(Adw.Application):
     def __init__(self):
         super().__init__(application_id=APP_ID)
         for name, cb in (("setup", lambda *_: self.win.run_setup()), ("dawenv", lambda *_: self.win.run_bg("DAW environment", lambda r: yabridge.configure_daw_environment(self.win.prefix, r))), ("about", self.about)):
             act = Gio.SimpleAction(name=name); act.connect("activate", cb); self.add_action(act)
-        # Ctrl+1..4 switch tabs (keyboard access to the view switcher)
-        for i, page in enumerate(("plugins", "install", "health", "task"), start=1):
+        # Ctrl+1..5 switch tabs (keyboard access to the view switcher)
+        for i, page in enumerate(("plugins", "programs", "install", "health", "task"), start=1):
             act = Gio.SimpleAction(name=f"tab{i}"); act.connect("activate", lambda *_, p=page: self.win.stack.set_visible_child_name(p))
             self.add_action(act); self.set_accels_for_action(f"app.tab{i}", [f"<Control>{i}"])
     def do_activate(self):

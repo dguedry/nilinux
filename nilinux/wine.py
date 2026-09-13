@@ -106,11 +106,11 @@ class Prefix:
         return host.run([str(self.build.wine), *args], env=self.wine_env(env, debug), cwd=cwd,
                         capture_output=capture, text=capture, **kw)
 
-    def spawn(self, args: list[str], *, env: dict | None = None, log: Path | None = None) -> subprocess.Popen:
+    def spawn(self, args: list[str], *, env: dict | None = None, log: Path | None = None, cwd=None) -> subprocess.Popen:
         """Start a Windows program detached (GUI apps). The returned process ends
         when the program does (flatpak-spawn waits for its host command)."""
         out = open(log, "ab") if log else subprocess.DEVNULL
-        return host.popen([str(self.build.wine), *args], env=self.wine_env(env), stdout=out, stderr=out,
+        return host.popen([str(self.build.wine), *args], env=self.wine_env(env), cwd=cwd, stdout=out, stderr=out,
                           stdin=subprocess.DEVNULL, start_new_session=True)
 
     # -- lifecycle ---------------------------------------------------------------

@@ -73,6 +73,11 @@ the prefix, logs. Nothing is installed system-wide.
   - *Run a plugin installer* — any third-party Windows plugin installer;
     its own window opens, and the plugins are bridged when it finishes.
   - *Add a plugin folder* / *Bridge plugins now*.
+- **Programs** — every Windows program in the prefix (from installers'
+  registry records and Start Menu shortcuts), with *Run* and *Uninstall*, and
+  *Install a Windows program* for any `.exe` or `.msi`. The prefix is tuned for
+  audio software: programs that need .NET, an embedded browser or Direct3D will
+  not run, and the page says so instead of adding those layers.
 - **Health** — every fix and prerequisite with a repair hint. The menu has
   *Re-run setup / repair* and *Make DAWs use this wine*.
 
@@ -96,7 +101,7 @@ removes that file.)
 Bridged plugins land in `~/.vst/yabridge`, `~/.vst3/yabridge`,
 `~/.clap/yabridge`; point your DAW there if it does not scan them already.
 
-CLI equivalents: `setup`, `install-na <file>`, `launch [--wait]`,
+CLI equivalents: `setup`, `install-na <file>`, `launch [--wait]`, `programs`, `run <name>`, `uninstall <name>`, `install-program <file>`,
 `products`, `register`, `install <installer> [--third-party]`, `sync
 [dirs…] [--daw-env]`, `doctor`, `status`, `prefixes`, `finish-installs`.
 

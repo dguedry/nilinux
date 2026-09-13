@@ -1,7 +1,7 @@
 """Command-line front end. Every subcommand is a thin call into the package."""
 import argparse, sys
 from pathlib import Path
-from . import __version__, paths, wine, native_access as na, products, yabridge, doctor, prefixes
+from . import __version__, paths, wine, native_access as na, products, yabridge, doctor, prefixes, programs
 from .progress import ConsoleReporter
 
 def _prefix(create=False) -> wine.Prefix:
@@ -70,11 +70,33 @@ def cmd_register(a):
     done = [n for n in a.names if products.register_library(p, n, r)] if a.names else products.register_all_libraries(p, r)
     print(f"registered: {done or 'nothing new'}")
 
+def cmd_programs(a):
+    p = _prefix(); rows = programs.installed(p)
+    if not rows: print("no programs found in the prefix"); return
+    w = max(len(x.name) for x in rows)
+    for x in rows:
+        print(f"  {x.name.ljust(w)}  {x.version:10}  {x.exe or '(uninstall only)'}")
+
+def cmd_run(a):
+    p = _prefix(); r = ConsoleReporter()
+    prog = programs.find(p, a.name); proc = programs.run(p, prog, r)
+    if a.wait: proc.wait()
+
+def cmd_uninstall(a):
+    p = _prefix(); r = ConsoleReporter()
+    programs.uninstall(p, programs.find(p, a.name), r)
+    if not a.no_sync: yabridge.sync(p, r)
+
+def cmd_install_program(a):
+    p = _prefix(); r = ConsoleReporter()
+    programs.install(p, Path(a.installer), r)
+    if not a.no_sync: yabridge.sync(p, r)
+
 def cmd_install(a):
     p = _prefix(); r = ConsoleReporter()
     src = Path(a.installer)
     if a.third_party:
-        products.run_installer(p, src, r)
+        programs.install(p, src, r)
     else:
         res = products.install_app(p, src, r, keep_trace=a.keep_trace)
         print(f"  {res['name']}: installed via {res['method']}")
@@ -123,6 +145,13 @@ def main(argv=None):
     s = sp.add_parser("sync", help="bridge the prefix's plugins to Linux DAWs with yabridge")
     s.add_argument("dirs", nargs="*", help="extra plugin directories"); s.add_argument("--daw-env", action="store_true", help="make DAWs use the app's wine for this prefix (~/.local/bin/wine shim)")
     s.set_defaults(f=cmd_sync)
+    sp.add_parser("programs", help="list Windows programs installed in the prefix").set_defaults(f=cmd_programs)
+    s = sp.add_parser("run", help="start an installed program (name or part of it)")
+    s.add_argument("name"); s.add_argument("--wait", action="store_true"); s.set_defaults(f=cmd_run)
+    s = sp.add_parser("uninstall", help="run an installed program's own uninstaller")
+    s.add_argument("name"); s.add_argument("--no-sync", action="store_true"); s.set_defaults(f=cmd_uninstall)
+    s = sp.add_parser("install-program", help="run any Windows installer (.exe or .msi) in the prefix")
+    s.add_argument("installer"); s.add_argument("--no-sync", action="store_true"); s.set_defaults(f=cmd_install_program)
     sp.add_parser("status", help="yabridge status").set_defaults(f=cmd_status)
     sp.add_parser("prefixes", help="which nilinux prefixes exist, which one runs the NI daemon, what yabridge points at").set_defaults(f=cmd_prefixes)
     s = sp.add_parser("finish-installs", help="complete installs Native Access started but did not finish")
