@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.16" date="2026-09-13">
+      <description>
+        <p>Programs: derive the install directory from the launcher when the registry has none</p>
+      </description>
+    </release>
     <release version="0.1.15" date="2026-09-13">
       <description>
         <p>Program quirks: generic asar patcher; IK Product Manager's `ver` parsing</p>
