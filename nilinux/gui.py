@@ -198,8 +198,14 @@ class Window(Adw.ApplicationWindow):
             ui(show)
         threading.Thread(target=work, daemon=True).start()
     def run_program(self, prog):
-        try: programs.run(self.prefix, prog); self.toast(f"{prog.name} is starting…")
-        except Exception as e: self.toast(str(e))
+        try: proc = programs.run(self.prefix, prog); self.toast(f"{prog.name} is starting…")
+        except Exception as e: self.toast(str(e)); return
+        # a vendor's own manager (IK Product Manager, iLok-free installers…) installs
+        # plugins while it runs: bridge whatever appeared once it exits
+        def watch():
+            proc.wait()
+            ui(lambda: self.run_bg(f"Bridging plugins after {prog.name}", lambda r: yabridge.sync(self.prefix, r)))
+        threading.Thread(target=watch, daemon=True).start()
     def uninstall_program(self, prog):
         def fn(r):
             programs.uninstall(self.prefix, prog, r); yabridge.sync(self.prefix, r)

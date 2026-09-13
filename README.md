@@ -75,7 +75,9 @@ the prefix, logs. Nothing is installed system-wide.
   - *Add a plugin folder* / *Bridge plugins now*.
 - **Programs** — every Windows program in the prefix (from installers'
   registry records and Start Menu shortcuts), with *Run* and *Uninstall*, and
-  *Install a Windows program* for any `.exe` or `.msi`. The prefix is tuned for
+  *Install a Windows program* for any `.exe` or `.msi`. When a program started
+  from this page exits, plugins are bridged again (a vendor's own manager, like
+  IK Product Manager, installs plugins while it runs). The prefix is tuned for
   audio software: programs that need .NET, an embedded browser or Direct3D will
   not run, and the page says so instead of adding those layers.
 - **Health** — every fix and prerequisite with a repair hint. The menu has

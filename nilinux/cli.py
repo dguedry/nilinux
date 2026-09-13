@@ -80,7 +80,8 @@ def cmd_programs(a):
 def cmd_run(a):
     p = _prefix(); r = ConsoleReporter()
     prog = programs.find(p, a.name); proc = programs.run(p, prog, r)
-    if a.wait: proc.wait()
+    if a.wait:
+        proc.wait(); yabridge.sync(p, r)           # the program may have installed plugins
 
 def cmd_uninstall(a):
     p = _prefix(); r = ConsoleReporter()
