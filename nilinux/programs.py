@@ -198,6 +198,7 @@ def installed(p: Prefix) -> list[Program]:
     for prog in by_name.values():
         if not prog.exe: prog.exe = _find_exe(p, prog.install_dir)
         if prog.exe and not prog.workdir: prog.workdir = str(Path(prog.exe).parent).replace("/", "\\")
+        if prog.exe and not prog.install_dir: prog.install_dir = prog.exe.rsplit("\\", 1)[0]   # registry records without InstallLocation
     return sorted(by_name.values(), key=lambda x: x.name.lower())
 
 def find(p: Prefix, name: str) -> Program:

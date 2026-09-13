@@ -94,6 +94,7 @@ class InstalledTest(unittest.TestCase):
             ik = progs["IK Product Manager"]
             self.assertEqual(ik.version, "1.1.15"); self.assertEqual(sorted(ik.sources), ["registry", "shortcut"])
             self.assertTrue(ik.exe.endswith("IK Product Manager.exe")); self.assertTrue(ik.uninstall.startswith('"C:'))
+            self.assertEqual(ik.install_dir, r"C:\Program Files\IK Multimedia\IK Product Manager")   # derived from the launcher: no InstallLocation in the registry
             dirt = progs["Native Instruments Dirt"]
             self.assertTrue(dirt.ni); self.assertTrue(dirt.uninstall.startswith("cmd.exe")); self.assertEqual(dirt.exe, "")   # no install dir on disk
             self.assertEqual(progs["Standalone"].args, "-x"); self.assertEqual(progs["Standalone"].sources, ["shortcut"])
