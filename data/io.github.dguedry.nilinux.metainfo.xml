@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.15" date="2026-09-13">
+      <description>
+        <p>Program quirks: generic asar patcher; IK Product Manager's `ver` parsing</p>
+      </description>
+    </release>
     <release version="0.1.14" date="2026-09-13">
       <description>
         <p>Programs: refresh after uninstall, wait for detached uninstallers, fix shortcut NULs</p>
