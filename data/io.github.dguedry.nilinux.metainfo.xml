@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.13" date="2026-09-13">
+      <description>
+        <p>Programs: list, run, install and uninstall any Windows program in the prefix</p>
+      </description>
+    </release>
     <release version="0.1.12" date="2026-09-12">
       <description>
         <p>CI: Flathub linter is advisory; the app ships as a GitHub release bundle only</p>
