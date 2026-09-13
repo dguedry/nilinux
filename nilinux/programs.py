@@ -218,7 +218,9 @@ def run(p: Prefix, prog: Program, reporter=None):
     if prog.install_dir: quirks.apply(p, prog.name, prog.install_dir, r)
     r.step(f"Starting {prog.name}")
     cwd = p.to_host(prog.workdir) if prog.workdir else None
-    argv = [prog.exe, *(shlex.split(prog.args, posix=False) if prog.args else [])]
+    extra = quirks.launch_args(p, prog.name, prog.install_dir) if prog.install_dir else []
+    if extra: r.log(f"launch arguments: {' '.join(extra)}")
+    argv = [prog.exe, *(shlex.split(prog.args, posix=False) if prog.args else []), *extra]
     proc = p.spawn(argv, cwd=str(cwd) if cwd and cwd.is_dir() else None)
     r.ok(prog.exe); return proc
 

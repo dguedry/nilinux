@@ -31,6 +31,25 @@ QUIRKS = {
                             "os-info: accept Wine's `ver` output (no [Version …] brackets)")],
 }
 
+# Extra command-line arguments per program. Electron apps get --disable-gpu by
+# default: under Wine Chromium's GPU process wedges and the browser thread waits
+# on it forever, so the window stays blank and the desktop reports the program
+# as not responding (Native Access, IK Product Manager). An app whose own
+# argument parser rejects unknown options can be listed here with [] instead.
+ELECTRON_ARGS = ["--disable-gpu"]
+LAUNCH_ARGS: dict[str, list[str]] = {}
+
+def is_electron(p: Prefix, install_dir: str) -> bool:
+    d = p.to_host(install_dir)
+    return (d / "resources/app.asar").exists() or (d / "resources/electron.asar").exists() or (d / "chrome_100_percent.pak").exists()
+
+def launch_args(p: Prefix, name: str, install_dir: str) -> list[str]:
+    """Arguments to add when starting `name` from install_dir (Windows path)."""
+    for key, args in LAUNCH_ARGS.items():
+        if key.lower() in name.lower(): return list(args)
+    if install_dir and is_electron(p, install_dir): return list(ELECTRON_ARGS)
+    return []
+
 def _match(name: str):
     for key, quirks in QUIRKS.items():
         if key.lower() in name.lower(): return quirks

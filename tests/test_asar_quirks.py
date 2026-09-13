@@ -32,6 +32,17 @@ class QuirkTest(unittest.TestCase):
         out = quirks._ik_os_info(js)
         self.assertIn(b"|| winVersion.match(/(\\d+\\.\\d+[\\d.]*)/)", out); self.assertIsNone(quirks._ik_os_info(out))
         with self.assertRaises(LookupError): quirks._ik_os_info(b"nothing here")
+    def test_launch_args_for_electron_apps(self):
+        with tempfile.TemporaryDirectory() as d:
+            from nilinux.wine import Prefix, WineBuild
+            p = Prefix(Path(d), WineBuild(Path("/w")))
+            app = p.drive_c / "Program Files/X"; (app / "resources").mkdir(parents=True); (app / "resources/app.asar").write_bytes(b"")
+            plain = p.drive_c / "Program Files/Y"; plain.mkdir(parents=True)
+            self.assertEqual(quirks.launch_args(p, "X", r"C:\Program Files\X"), ["--disable-gpu"])
+            self.assertEqual(quirks.launch_args(p, "Y", r"C:\Program Files\Y"), [])
+            quirks.LAUNCH_ARGS["X"] = []
+            try: self.assertEqual(quirks.launch_args(p, "X", r"C:\Program Files\X"), [])
+            finally: quirks.LAUNCH_ARGS.pop("X")
     def test_match_by_name(self):
         self.assertTrue(quirks._match("IK Product Manager")); self.assertFalse(quirks._match("Kontakt 8"))
 
