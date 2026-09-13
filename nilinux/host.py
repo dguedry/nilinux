@@ -16,6 +16,9 @@ import os, shutil, subprocess
 from pathlib import Path
 
 FLATPAK_INFO = Path("/.flatpak-info")
+# Variables that must never reach a Wine program. VS Code exports the first in its
+# terminals; an Electron app started with it runs as plain Node and exits at once.
+UNSET = ("ELECTRON_RUN_AS_NODE",)
 
 def in_flatpak() -> bool:
     return FLATPAK_INFO.exists()
@@ -24,7 +27,7 @@ def wrap(cmd: list[str], env: dict | None = None, cwd: str | os.PathLike | None 
     """The argv that runs `cmd` on the host with `env` added to the host session
     environment (unchanged outside Flatpak; the caller merges env then)."""
     if not in_flatpak(): return list(cmd)
-    out = ["flatpak-spawn", "--host"]
+    out = ["flatpak-spawn", "--host", *(f"--unset-env={v}" for v in UNSET)]
     if cwd: out.append(f"--directory={cwd}")
     out += [f"--env={k}={v}" for k, v in (env or {}).items()]
     return out + ["--", *cmd]
@@ -33,7 +36,9 @@ def _kw(env: dict | None, cwd, kw: dict) -> dict:
     if in_flatpak():
         kw.pop("cwd", None)             # passed as --directory
     else:
-        if env: kw["env"] = {**os.environ, **env}
+        merged = {k: v for k, v in os.environ.items() if k not in UNSET}
+        if env: merged.update(env)
+        kw["env"] = merged
         if cwd: kw["cwd"] = cwd
     return kw
 

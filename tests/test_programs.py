@@ -68,6 +68,10 @@ class LnkTest(unittest.TestCase):
         info = programs.parse_lnk(b)
         self.assertEqual(info["target"], r"C:\Program Files\X\X.exe")
         self.assertEqual(info["name"], "X"); self.assertEqual(info["workdir"], r"C:\Program Files\X"); self.assertEqual(info["args"], "--flag")
+    def test_wine_trailing_nul_in_strings(self):
+        b = make_lnk("C:\\P\\X.exe", "X\0", "C:\\P\0", "\0")     # Wine counts the terminator in the length
+        info = programs.parse_lnk(b)
+        self.assertEqual((info["name"], info["workdir"], info["args"]), ("X", r"C:\P", ""))
     def test_garbage(self):
         self.assertEqual(programs.parse_lnk(b"nope")["target"], "")
 

@@ -23,6 +23,17 @@ class HostRunnerTest(unittest.TestCase):
         self.assertIn("--env=WINEPREFIX=/p", argv); self.assertIn("--env=WINEFSYNC=1", argv)
         self.assertEqual(argv[argv.index("--") + 1:], ["/w/bin/wine", "cmd", "/c", "echo"])
 
+    def test_electron_run_as_node_never_reaches_wine(self):
+        host.FLATPAK_INFO = Path("/etc/hostname")
+        self.assertIn("--unset-env=ELECTRON_RUN_AS_NODE", host.wrap(["/w/bin/wine"], {}))
+        host.FLATPAK_INFO = Path("/nonexistent/.flatpak-info")
+        import os
+        old = os.environ.get("ELECTRON_RUN_AS_NODE"); os.environ["ELECTRON_RUN_AS_NODE"] = "1"
+        try: self.assertNotIn("ELECTRON_RUN_AS_NODE", host._kw({"WINEPREFIX": "/p"}, None, {})["env"])
+        finally:
+            if old is None: os.environ.pop("ELECTRON_RUN_AS_NODE", None)
+            else: os.environ["ELECTRON_RUN_AS_NODE"] = old
+
     def test_wine_env_is_only_wines_variables(self):
         p = Prefix(Path("/p"), WineBuild(Path("/w")))
         e = p.wine_env({"WINEDEBUG": "+seh"})

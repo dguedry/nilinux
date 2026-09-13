@@ -203,11 +203,11 @@ class Window(Adw.ApplicationWindow):
     def uninstall_program(self, prog):
         def fn(r):
             programs.uninstall(self.prefix, prog, r); yabridge.sync(self.prefix, r)
-        self.run_bg(f"Uninstalling {prog.name}", fn, done=self.refresh_programs)
+        self.run_bg(f"Uninstalling {prog.name}", fn)          # run_bg refreshes every page when done
     def install_program(self, path):
         def fn(r):
             programs.install(self.prefix, path, r); return yabridge.sync(self.prefix, r)
-        self.run_bg(f"Installing {path.name}", fn, done=self.refresh_programs)
+        self.run_bg(f"Installing {path.name}", fn)
 
     # ---- install page -------------------------------------------------------------------
     def build_install(self):

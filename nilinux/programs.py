@@ -17,7 +17,7 @@ runtime, no Wine Mono or Gecko, no 3D layer): programs needing .NET, an embedded
 browser or Direct3D will not run, and that is said in the GUI rather than fixed
 here, because each of those layers would put the NI stack at risk.
 """
-import re, shlex, struct
+import re, shlex, struct, time
 from dataclasses import dataclass, field
 from pathlib import Path
 from .progress import null_reporter
@@ -129,7 +129,7 @@ def parse_lnk(data: bytes) -> dict:
         n = struct.unpack_from("<H", data, pos)[0]; pos += 2
         if unicode: s = data[pos:pos + 2 * n].decode("utf-16-le", errors="replace"); pos += 2 * n
         else: s = data[pos:pos + n].decode("cp1252", errors="replace"); pos += n
-        return s
+        return s.strip("\0")        # Wine counts the terminating NUL in the length
     try:
         if flags & 0x04: res["name"] = sdata()                  # HasName
         if flags & 0x08: rel = sdata(); res["target"] = res["target"] or rel   # HasRelativePath
@@ -239,8 +239,21 @@ def uninstall(p: Prefix, prog: Program, reporter=None) -> int:
     if not argv: raise RuntimeError(f"{prog.name} did not register an uninstaller; delete its folder from the prefix by hand")
     r.step(f"Uninstalling {prog.name}")
     cp = p.run(argv, timeout=7200, capture=False)
+    # NSIS (and InnoSetup) uninstallers copy themselves to a temp folder, start that
+    # copy and return at once; the real work happens after our call comes back.
+    wait_for_uninstaller(p, prog)
     (r.ok if cp.returncode == 0 else r.fail)(f"exit {cp.returncode}")
     return cp.returncode
+
+UNINSTALLER_PROC = re.compile(r"(Au_\.exe|_iu[0-9a-z]*\.tmp|unins[0-9]*\.exe|uninstall)", re.I)
+
+def wait_for_uninstaller(p: Prefix, prog: Program, timeout=1800):
+    """Block while an uninstaller (or its temp copy) still runs in the prefix."""
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        procs = [c for _, c in p.processes() if UNINSTALLER_PROC.search(c)]
+        if not procs: return
+        time.sleep(2)
 
 def install(p: Prefix, installer: Path, reporter=None) -> int:
     """Run any Windows installer interactively: .msi through msiexec, anything else
