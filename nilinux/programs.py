@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from .progress import null_reporter
 from .wine import Prefix
+from . import quirks
 
 UNINSTALL_KEYS = (r"Software\Microsoft\Windows\CurrentVersion\Uninstall",
                   r"Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall")
@@ -213,6 +214,7 @@ def run(p: Prefix, prog: Program, reporter=None):
     """Start the program detached; returns the Popen (ends when the program exits)."""
     r = null_reporter(reporter)
     if not prog.exe: raise RuntimeError(f"{prog.name} has no known launcher (only an uninstaller)")
+    if prog.install_dir: quirks.apply(p, prog.name, prog.install_dir, r)
     r.step(f"Starting {prog.name}")
     cwd = p.to_host(prog.workdir) if prog.workdir else None
     argv = [prog.exe, *(shlex.split(prog.args, posix=False) if prog.args else [])]
@@ -266,4 +268,6 @@ def install(p: Prefix, installer: Path, reporter=None) -> int:
     else: argv = [str(installer)]
     cp = p.run(argv, timeout=7200, capture=False)
     (r.ok if cp.returncode == 0 else r.fail)(f"exit {cp.returncode}")
+    for prog in installed(p):                      # quirks for whatever just appeared
+        if prog.install_dir: quirks.apply(p, prog.name, prog.install_dir, r)
     return cp.returncode

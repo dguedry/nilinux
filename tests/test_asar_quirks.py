@@ -1,0 +1,38 @@
+import json, struct, tempfile, unittest
+from pathlib import Path
+from nilinux import asar, quirks
+
+def make_asar(files: dict[str, bytes]) -> bytes:
+    header = {"files": {}}; blobs = b""; off = 0
+    for path, blob in files.items():
+        node = header
+        parts = path.split("/")
+        for part in parts[:-1]: node = node["files"].setdefault(part, {"files": {}})
+        node["files"][parts[-1]] = {"offset": str(off), "size": len(blob), "integrity": asar._integrity(blob)}
+        blobs += blob; off += len(blob)
+    hj = json.dumps(header, separators=(",", ":")).encode(); pad = ((len(hj) + 3) & ~3) - len(hj)
+    return struct.pack("<IIII", 4, len(hj) + pad + 8, len(hj) + pad + 4, len(hj)) + hj + b"\0" * pad + blobs
+
+class AsarTest(unittest.TestCase):
+    def test_patch_and_read(self):
+        with tempfile.TemporaryDirectory() as d:
+            a = Path(d) / "app.asar"; a.write_bytes(make_asar({"main.js": b"hello", "local_modules/os-info/index.js": b"x = 1;", "big.bin": b"z" * 10}))
+            res = asar.patch(a, {r"local_modules/os-info/index\.js": lambda b: b.replace(b"1", b"2"), r"main\.js": lambda b: None})
+            self.assertEqual(res[r"local_modules/os-info/index\.js"], "patched"); self.assertEqual(res[r"main\.js"], "unchanged")
+            self.assertEqual(asar.read(a, "local_modules/os-info/index.js"), b"x = 2;")
+            self.assertEqual(asar.read(a, "main.js"), b"hello"); self.assertEqual(asar.read(a, "big.bin"), b"z" * 10)
+            self.assertTrue(a.with_suffix(".asar.orig").exists())
+            hdr = asar._header(a.read_bytes())[0]
+            node = hdr["files"]["local_modules"]["files"]["os-info"]["files"]["index.js"]
+            self.assertEqual(node["integrity"]["hash"], asar._integrity(b"x = 2;")["hash"])
+
+class QuirkTest(unittest.TestCase):
+    def test_ik_os_info(self):
+        js = b"const winVersion = execSync('ver').toString().trim()\n        version = winVersion.match(/\\[([^\\]]+)\\]/)\n        for (x of y) {}"
+        out = quirks._ik_os_info(js)
+        self.assertIn(b"|| winVersion.match(/(\\d+\\.\\d+[\\d.]*)/)", out); self.assertIsNone(quirks._ik_os_info(out))
+        with self.assertRaises(LookupError): quirks._ik_os_info(b"nothing here")
+    def test_match_by_name(self):
+        self.assertTrue(quirks._match("IK Product Manager")); self.assertFalse(quirks._match("Kontakt 8"))
+
+if __name__ == "__main__": unittest.main()
