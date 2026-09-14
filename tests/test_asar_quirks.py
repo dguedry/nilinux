@@ -32,6 +32,15 @@ class QuirkTest(unittest.TestCase):
         out = quirks._ik_os_info(js)
         self.assertIn(b"|| winVersion.match(/(\\d+\\.\\d+[\\d.]*)/)", out); self.assertIsNone(quirks._ik_os_info(out))
         with self.assertRaises(LookupError): quirks._ik_os_info(b"nothing here")
+    def test_electron_disable_gpu_inserted_after_the_electron_require(self):
+        js = b"// eslint-disable-next-line\nconst { app, dialog } = require('electron')\n\nconst fs = require('fs')\napp.on('ready', () => {})\n"
+        out = quirks._electron_disable_gpu(js)
+        lines = out.split(b"\n")
+        self.assertIn(b"require('electron')", lines[1]); self.assertTrue(lines[2].startswith(b"require('electron').app.disableHardwareAcceleration()"))
+        self.assertIn(quirks.MARK, lines[2]); self.assertEqual(lines[3:], js.split(b"\n")[2:])
+        self.assertIsNone(quirks._electron_disable_gpu(out))                       # idempotent
+        with self.assertRaises(LookupError): quirks._electron_disable_gpu(b"const x = require('fs')\n")
+
     def test_launch_args_for_electron_apps(self):
         with tempfile.TemporaryDirectory() as d:
             from nilinux.wine import Prefix, WineBuild

@@ -191,6 +191,7 @@ Each of these was diagnosed from a real failure.
 | NA exits silently before any window | Wine sizes the main thread from the exe's PE header (8 MB); V8 overflows it | Patches the header's stack reserve to 64 MB (re-applied on every launch) |
 | `out of GDI object handles`, no window | No Segoe UI etc.; Chromium's font fallback re-enumerates fonts ~53 000 times | Installs DejaVu/Liberation/Noto and maps Segoe UI, Tahoma, Calibri… to them |
 | Blank window (NA ≥ 3.25) | Chromium GPU process crash-loops | Launches with `--disable-gpu` |
+| IK Product Manager opens blank / "not responding" when a plugin starts it from its licence dialog (it works from this app's Programs page) | Same Electron GPU wedge; the plugin starts the exe with no arguments, so `--disable-gpu` is not there | Quirk: `app.disableHardwareAcceleration()` is written into the app's `main.js` (idempotent, `.orig` kept), applied on install and before every Run |
 | NTK Daemon / NI apps crash in `msvcp140` | Wine's `ucrtbase` and a mismatched VC runtime | Installs the real `ucrtbase.dll` and a matched VC++ 2022 set with native overrides |
 | "Grant permission to install dependencies" does nothing | The daemon's MSI custom actions crash | Extracts the daemon from NA's own resources and registers it as a service |
 | NA's installer/updater exits with code 2 | NSIS package does not run under Wine | Extracts `app-64.7z` from the installer instead |

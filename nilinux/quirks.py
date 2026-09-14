@@ -26,9 +26,26 @@ def _ik_os_info(js: bytes):
     if js.count(_IK_OLD) != 1: raise LookupError("os-info getVersion not found once")
     return js.replace(_IK_OLD, _IK_NEW, 1)
 
+# Electron's GPU process wedges under Wine and the browser thread waits on it
+# forever: a blank window the desktop reports as "not responding". nilinux passes
+# --disable-gpu when it starts the program, but a plugin starts the Product
+# Manager itself from its licence dialog, with no arguments. Bake the same thing
+# into the app: disableHardwareAcceleration() right after Electron is required,
+# before app "ready".
+_ELECTRON_REQUIRE = re.compile(rb"^.*=\s*require\((['\"])electron\1\)[^\n]*\n", re.M)
+
+def _electron_disable_gpu(js: bytes):
+    if MARK in js: return None
+    m = _ELECTRON_REQUIRE.search(js)
+    if not m: raise LookupError("no `require('electron')` line in the main script")
+    inject = b"require('electron').app.disableHardwareAcceleration() " + MARK + b"\n"
+    return js[:m.end()] + inject + js[m.end():]
+
 QUIRKS = {
     "IK Product Manager": [("resources/app.asar", r"local_modules/os-info/index\.js", _ik_os_info,
-                            "os-info: accept Wine's `ver` output (no [Version …] brackets)")],
+                            "os-info: accept Wine's `ver` output (no [Version …] brackets)"),
+                           ("resources/app.asar", r"^main\.js$", _electron_disable_gpu,
+                            "disable GPU acceleration in the app itself (also when a plugin starts it)")],
 }
 
 # Extra command-line arguments per program. Electron apps get --disable-gpu by
