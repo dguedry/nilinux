@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.19" date="2026-09-15">
+      <description>
+        <p>DXVK for plugin GUIs, when the machine has a hardware Vulkan driver</p>
+      </description>
+    </release>
     <release version="0.1.18" date="2026-09-13">
       <description>
         <p>Programs: bridge plugins again when a program started from the page exits</p>
