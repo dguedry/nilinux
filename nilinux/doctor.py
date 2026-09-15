@@ -2,7 +2,7 @@
 import shutil, subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from . import paths, wine, native_access as na, yabridge, products, prefixes, host
+from . import paths, wine, native_access as na, yabridge, products, prefixes, dxvk, host
 
 @dataclass
 class Check:
@@ -97,6 +97,15 @@ def run(p: wine.Prefix | None = None) -> list[Check]:
                        "" if not gaps else "invisible from this sandbox: " + ", ".join(gaps)
                        + " -- when this app starts the prefix's wineserver, host DAW plugins cannot open them (Kontakt aborts at load)",
                        fix="flatpak override --user --filesystem=host io.github.dguedry.nilinux (the current manifest grants it; reinstall the app)"))
+    d = dxvk.status(p)
+    if not d["vulkan_ok"]:
+        c.append(Check("DXVK (plugin GUI rendering)", True,
+                       f"not used: {d['vulkan']}; Wine's own renderer is fine for most plugins, but some (IK Multimedia) will not repaint until their window is resized",
+                       fix="install a Vulkan driver for your GPU, then: nilinux dxvk install"))
+    else:
+        c.append(Check("DXVK (plugin GUI rendering)", d["installed"],
+                       (f"{d['version']} on {d['vulkan']}" if d["installed"] else f"Vulkan is available ({d['vulkan']}) but DXVK is not installed"),
+                       fix="nilinux dxvk install"))
     ystat = yabridge.status(p)
     foreign = prefixes.foreign_yabridge_dirs(p, ystat)
     c.append(Check("yabridge lists only this prefix", not foreign,

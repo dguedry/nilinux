@@ -538,7 +538,11 @@ def apply_pending_update(p: Prefix, reporter=None) -> bool:
 def prepare(p: Prefix, reporter=None):
     """Everything that does not need Native Access: prefix, fonts, C runtime, registry."""
     r = null_reporter(reporter)
-    p.create(r); p.refresh_builtins(r); fonts(p, r); vc_runtime(p, r); registry(p, r); download_location(p, r); p.wait_idle()
+    p.create(r); p.refresh_builtins(r); fonts(p, r); vc_runtime(p, r); registry(p, r); download_location(p, r)
+    from . import dxvk
+    try: dxvk.install(p, r)          # plugin GUIs that WineD3D draws wrong (skipped without a hardware Vulkan driver)
+    except Exception as e: r.step("Installing DXVK"); r.fail(str(e)[:80])
+    p.wait_idle()
     from . import yabridge
     try: yabridge.install(r)      # so DAW bridging works from the first product install
     except Exception as e: r.step("Installing yabridge"); r.fail(str(e)[:80])

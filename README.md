@@ -208,6 +208,7 @@ Each of these was diagnosed from a real failure.
 | A plugin vanished after Native Access updated it; the bridge link points at a missing file | NA's InstallAware update removed the old files and died before deploying the new ones | Finishes the install from the staged payload / kept download after NA exits, or via *Finish interrupted installs* |
 | After a DAW session, NI installers die instantly ("Cannot create temporary folder" style dialogs, daemon error 731) | A DAW's yabridge ran the *host* wine on the prefix, whose prefix update replaced the built-in DLLs with another version's | Health compares built-in DLLs with the app's wine; setup re-runs the prefix update with the right wine (native C runtime files are kept) |
 | Kontakt (or another NI plugin) aborts while loading in every DAW right after the Flatpak app was used, and Native Access cannot see or write its download folder | wineserver opens files for every client, and the app's sandbox had started the prefix's wineserver without being able to see the host folders the prefix's `Documents`/`Music`/`Downloads`/... links point to (Kontakt keeps its Service Center data under Documents) | The Flatpak asks for `--filesystem=host`; Health ("sandbox sees every path the prefix links to") lists anything the sandbox still cannot see |
+| A plugin GUI does not repaint: switching a tab leaves the previous screen behind until the window is resized or hovered over, so clicks look like they were ignored (IK Multimedia Hammond B-3X) | Recent JUCE-based plugins draw through Direct3D and do not redraw correctly under Wine's own renderer | Installs [DXVK](https://github.com/doitsujin/dxvk) (Direct3D on Vulkan) into the prefix when the machine has a hardware Vulkan driver, and leaves Wine's renderer alone when only software rendering is available; `nilinux dxvk status｜install｜remove`, and Health reports which |
 
 The `app.asar` patches recompute the archive's per-file integrity and the
 header hash stored in the exe (NA ships with Electron's asar-integrity fuse
@@ -219,6 +220,8 @@ on); originals are kept next to the patched files.
 nilinux/
   wine.py            portable wine provisioning; Prefix: env, run, 64-bit registry,
                      per-prefix process scan, wineserver lock detection
+  dxvk.py            Direct3D on Vulkan for plugin GUIs: hardware-Vulkan detection
+                     (software rendering does not count), install/remove, status
   native_access.py   install from a user-supplied installer, every NA fix, launch,
                      asar patcher (dependency check, auto-update off)
   products.py        NI catalogue, installed products, library registration,

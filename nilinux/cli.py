@@ -112,6 +112,18 @@ def cmd_sync(a):
 def cmd_status(a):
     p = _prefix(); print(yabridge.status(p))
 
+def cmd_dxvk(a):
+    from . import dxvk
+    p = _prefix()
+    if a.action == "status":
+        st = dxvk.status(p)
+        print(f"vulkan: {'yes' if st['vulkan_ok'] else 'no'} — {st['vulkan']}")
+        print(f"dxvk:   {st['version'] + ' installed' if st['installed'] else 'not installed'} (wanted {st['wanted']})")
+        return
+    r = ConsoleReporter()
+    if a.action == "remove": dxvk.uninstall(p, r)
+    else: dxvk.install(p, r, force=a.force)
+
 def cmd_prefixes(a):
     p = _prefix(); print(prefixes.report(p, na.NTK_PORTS, yabridge.status(p)))
 
@@ -154,6 +166,10 @@ def main(argv=None):
     s = sp.add_parser("install-program", help="run any Windows installer (.exe or .msi) in the prefix")
     s.add_argument("installer"); s.add_argument("--no-sync", action="store_true"); s.set_defaults(f=cmd_install_program)
     sp.add_parser("status", help="yabridge status").set_defaults(f=cmd_status)
+    s = sp.add_parser("dxvk", help="Direct3D on Vulkan for plugin GUIs that Wine draws wrong")
+    s.add_argument("action", nargs="?", default="install", choices=["install", "remove", "status"])
+    s.add_argument("--force", action="store_true", help="reinstall even if the pinned version is already there")
+    s.set_defaults(f=cmd_dxvk)
     sp.add_parser("prefixes", help="which nilinux prefixes exist, which one runs the NI daemon, what yabridge points at").set_defaults(f=cmd_prefixes)
     s = sp.add_parser("finish-installs", help="complete installs Native Access started but did not finish")
     s.add_argument("--no-sync", action="store_true"); s.set_defaults(f=cmd_finish_installs)
