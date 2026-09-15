@@ -36,15 +36,6 @@ echo ">> cloning yabridge ($REF)"
 git clone -q --depth 1 --branch "$REF" https://github.com/robbert-vdh/yabridge.git "$WORK/src"
 SHA="$(git -C "$WORK/src" rev-parse --short HEAD)"
 
-# nilinux's own fixes on top of master (patches/yabridge-*.patch), until upstream has them.
-HERE="$(cd "$(dirname "$0")/.." && pwd)"
-for patch in "$HERE"/patches/yabridge-*.patch; do
-  [ -f "$patch" ] || continue
-  echo ">> applying $(basename "$patch")"
-  git -C "$WORK/src" apply --check "$patch" && git -C "$WORK/src" apply "$patch" || { echo "patch $(basename "$patch") no longer applies to $REF ($SHA): upstream may have fixed it -- drop or refresh the patch"; exit 1; }
-done
-PATCHED="$(ls "$HERE"/patches/yabridge-*.patch 2>/dev/null | wc -l)"
-
 echo ">> building against Wine $WINE_VERSION with $(winegcc --version 2>&1 | head -1 || echo winegcc)"
 ( cd "$WORK/src"
   meson setup build --buildtype=release --cross-file=cross-wine.conf --unity=on --unity-size=1000 -Dbitbridge=false > "$WORK/meson.log" 2>&1 || { tail -30 "$WORK/meson.log"; exit 1; }
@@ -59,7 +50,7 @@ cp "$WORK/src"/build/libyabridge-{vst2,vst3,clap}.so "$WORK/src"/build/libyabrid
    "$WORK/src"/build/yabridge-host.exe "$WORK/src"/build/yabridge-host.exe.so "$WORK/src"/README.md "$WORK/src"/CHANGELOG.md "$PKG/"
 cp "$WORK/yabridge/yabridgectl" "$PKG/"
 cat > "$PKG/nilinux-build.json" <<JSON
-{"yabridge_ref": "$REF", "yabridge_commit": "$SHA", "nilinux_patches": $PATCHED, "wine_version": "$WINE_VERSION", "yabridgectl_release": "$YCTL_RELEASE", "built": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
+{"yabridge_ref": "$REF", "yabridge_commit": "$SHA", "wine_version": "$WINE_VERSION", "yabridgectl_release": "$YCTL_RELEASE", "built": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"}
 JSON
 
 NAME="yabridge-$SHA-wine-$WINE_VERSION.tar.gz"
