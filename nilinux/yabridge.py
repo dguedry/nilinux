@@ -102,13 +102,37 @@ def _find_build_tarball(wine_version: str, r) -> tuple[Path | None, str]:
     return fetch(a["browser_download_url"], paths.DOWNLOADS / a["name"], reporter=r, label="yabridge"), f"{a['name']} (nilinux release {rel.get('tag_name', '')})"
 
 def _install_tarball(tgz: Path, r):
-    """Replace ~/.local/share/yabridge with the tarball's yabridge/ directory."""
-    if YAB_DIR.exists():
-        bak = YAB_DIR.with_name(YAB_DIR.name + ".bak")
-        if bak.exists(): shutil.rmtree(bak)
-        YAB_DIR.rename(bak)
-    YAB_DIR.parent.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(tgz) as t: t.extractall(YAB_DIR.parent, filter="tar")
+    """Put the tarball's yabridge/ contents into ~/.local/share/yabridge.
+
+    The directory itself is never renamed or removed: under Flatpak it is a
+    `--filesystem=` grant, i.e. a bind mount, and renaming a mount point fails
+    with EBUSY. Files are replaced one by one through a temporary name in the
+    same directory, which is also what keeps a running DAW safe -- a plugin has
+    the old libraries mapped, and overwriting them in place would crash it,
+    while a rename just leaves it on the old inode.
+    """
+    YAB_DIR.mkdir(parents=True, exist_ok=True)
+    staging = YAB_DIR.parent / (YAB_DIR.name + ".new")
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
+    try:
+        with tarfile.open(tgz) as t: t.extractall(staging, filter="tar")
+        src = staging / "yabridge"
+        if not src.is_dir():                      # tarball without the leading directory
+            src = staging
+        bak = YAB_DIR / "previous"                # keep the replaced files inside the mount
+        shutil.rmtree(bak, ignore_errors=True); bak.mkdir(parents=True, exist_ok=True)
+        for f in sorted(src.iterdir()):
+            if f.is_dir(): continue               # the release tarballs are flat
+            dst = YAB_DIR / f.name
+            if dst.exists():
+                try: shutil.copy2(dst, bak / f.name)
+                except OSError: pass
+            tmp = YAB_DIR / f".{f.name}.new"
+            shutil.copy2(f, tmp)
+            tmp.replace(dst)                      # atomic within the same directory
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
     (Path.home() / ".local/bin").mkdir(parents=True, exist_ok=True)
     link = Path.home() / ".local/bin/yabridgectl"
     if not link.exists(): link.symlink_to(YCTL)
