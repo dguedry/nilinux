@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.20" date="2026-09-16">
+      <description>
+        <p>yabridge: install without renaming the directory (Flatpak EBUSY)</p>
+      </description>
+    </release>
     <release version="0.1.19" date="2026-09-15">
       <description>
         <p>DXVK for plugin GUIs, when the machine has a hardware Vulkan driver</p>
