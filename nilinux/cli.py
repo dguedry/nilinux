@@ -127,6 +127,18 @@ def cmd_dxvk(a):
 def cmd_prefixes(a):
     p = _prefix(); print(prefixes.report(p, na.NTK_PORTS, yabridge.status(p)))
 
+def cmd_url_handler(a):
+    from . import urlhandler
+    p = _prefix(); r = ConsoleReporter()
+    if a.action == "status":
+        st = urlhandler.status(p)
+        print(f"installed: {st['installed']}")
+        print(f"default handler for native-access://: {st['default'] or 'none'}")
+        print("ok" if st["ok"] else "not in use — run: nilinux url-handler register")
+        return
+    if a.action == "unregister": urlhandler.unregister(r)
+    else: urlhandler.register(p, r)
+
 def cmd_report(a):
     """Write a diagnostic bundle to attach to a bug report."""
     from . import report
@@ -189,6 +201,9 @@ def main(argv=None):
     s.add_argument("action", nargs="?", default="install", choices=["install", "remove", "status"])
     s.add_argument("--force", action="store_true", help="reinstall even if the pinned version is already there")
     s.set_defaults(f=cmd_dxvk)
+    s = sp.add_parser("url-handler", help="make browser sign-in return to Native Access (native-access:// links)")
+    s.add_argument("action", nargs="?", default="register", choices=["register", "unregister", "status"])
+    s.set_defaults(f=cmd_url_handler)
     s = sp.add_parser("report", help="write a diagnostic bundle to send with a bug report")
     s.add_argument("-o", "--output", help="where to write it (default: ~/nilinux-report-<date>.tar.gz)")
     s.add_argument("--summary-only", action="store_true", help="print the summary instead of writing a file")

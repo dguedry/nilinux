@@ -2,7 +2,7 @@
 import shutil, subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from . import paths, wine, native_access as na, yabridge, products, prefixes, dxvk, host
+from . import paths, wine, native_access as na, yabridge, products, prefixes, dxvk, urlhandler, host
 
 class _Checks(list):
     """A list that reports each Check to a callback as it is appended."""
@@ -121,6 +121,12 @@ def run(p: wine.Prefix | None = None, on_check=None) -> list[Check]:
         c.append(Check("DXVK (plugin GUI rendering)", d["installed"],
                        (f"{d['version']} on {d['vulkan']}" if d["installed"] else f"Vulkan is available ({d['vulkan']}) but DXVK is not installed"),
                        fix="nilinux dxvk install"))
+    u = urlhandler.status(p)
+    c.append(Check("browser sign-in returns to Native Access", u["ok"],
+                   ("" if u["ok"] else
+                    (f"native-access:// links open {u['default']} instead" if u["foreign"]
+                     else "nothing handles native-access:// links, so a browser login never comes back")),
+                   fix="nilinux url-handler register"))
     ystat = yabridge.status(p)
     foreign = prefixes.foreign_yabridge_dirs(p, ystat)
     c.append(Check("yabridge lists only this prefix", not foreign,

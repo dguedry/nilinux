@@ -547,6 +547,9 @@ def prepare(p: Prefix, reporter=None):
     try: yabridge.install(r)      # so DAW bridging works from the first product install
     except Exception as e: r.step("Installing yabridge"); r.fail(str(e)[:80])
     yabridge.configure_daw_environment(p, r)   # DAWs must run plugins with *this* wine (see yabridge.daw_environment_status)
+    from . import urlhandler
+    try: urlhandler.register(p, r)             # browser sign-in calls back to native-access://
+    except Exception as e: r.step("native-access:// handler"); r.fail(str(e)[:80])
 
 def install_native_access(p: Prefix, installer: Path, reporter=None):
     """Install (or update) NA from an installer the user downloaded from NI, then apply the NA-side fixes."""

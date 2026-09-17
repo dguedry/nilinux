@@ -355,6 +355,15 @@ class Window(Adw.ApplicationWindow):
     def build_health(self):
         page = Adw.PreferencesPage()
         self.health_group = Adw.PreferencesGroup(title="Checks"); page.add(self.health_group); self._rows[self.health_group] = []
+        g = Adw.PreferencesGroup(title="Sign-in")
+        r = Adw.ActionRow(title="Fix browser sign-in",
+                          subtitle="Native Access signs in through your browser; this makes the link come back to it.",
+                          activatable=True)
+        r.add_suffix(Gtk.Image(icon_name="system-users-symbolic"))
+        r.connect("activated", lambda *_: self.run_bg("Registering the sign-in handler",
+                                                      lambda rep: __import__("nilinux.urlhandler", fromlist=["x"]).register(self.prefix, rep)))
+        g.add(r); page.add(g)
+
         g = Adw.PreferencesGroup(title="Reporting a problem",
                                  description="If a check above cannot be fixed, send this with your report.")
         r = Adw.ActionRow(title="Save a diagnostic report",
