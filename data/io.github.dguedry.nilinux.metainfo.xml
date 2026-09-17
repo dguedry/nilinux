@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.21" date="2026-09-17">
+      <description>
+        <p>Notice an NI installer that has stalled, and finish it from what it staged</p>
+      </description>
+    </release>
     <release version="0.1.20" date="2026-09-16">
       <description>
         <p>yabridge: install without renaming the directory (Flatpak EBUSY)</p>
