@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from . import paths
 from .progress import null_reporter
+from . import host
 from .wine import Prefix
 
 NI_KEY = r"HKLM\Software\Native Instruments"
@@ -153,6 +154,29 @@ def _setup_exe_from(path: Path, workdir: Path) -> Path:
             z.extract(names[0], workdir); return workdir / names[0]
     return path
 
+def _run_installer_watched(p: Prefix, exe: Path, trace: Path, r) -> tuple[int, bool]:
+    """Run an InstallAware setup silently, giving up early if it stops making
+    progress. Returns (exit code, stalled). A stalled installer is killed so the
+    staged payload it holds is free for the deploy fallback."""
+    from .stall import StallWatch
+    watch = StallWatch()
+    with open(trace, "wb") as f:
+        proc = host.popen([str(p.build.wine), str(exe), "/s"],
+                          env=p.wine_env(None, "+msi"), stdout=subprocess.DEVNULL, stderr=f)
+        deadline = time.time() + 3600
+        while True:
+            try: return proc.wait(timeout=10), False
+            except subprocess.TimeoutExpired: pass
+            if watch.update([pid for pid, _ in p.processes(exe.name)]):
+                r.log(f"no CPU and no disk writes for {watch.quiet_for():.0f}s: treating as stalled")
+                p.kill_exe(exe.name)
+                try: proc.wait(timeout=30)
+                except subprocess.TimeoutExpired: proc.kill()
+                return -1, True
+            if time.time() > deadline:
+                p.kill_exe(exe.name); proc.kill()
+                return -1, True
+
 def install_app(p: Prefix, setup: Path, reporter=None, keep_trace=False) -> dict:
     """Install an NI application from its installer. Returns a summary dict."""
     r = null_reporter(reporter); paths.ensure_dirs()
@@ -164,14 +188,15 @@ def install_app(p: Prefix, setup: Path, reporter=None, keep_trace=False) -> dict
         trace = paths.LOGS / f"{name}-install.trace"
         r.step(f"Running installer silently: {exe.name}")
         t0 = time.time()
-        cp = p.run([str(exe), "/s"], debug="+msi", timeout=3600, capture=False, stderr_to=trace)
+        rc, stalled = _run_installer_watched(p, exe, trace, r)
         roots, regkeys = parse_trace(trace)
-        installed_ok = cp.returncode == 0 and any(p.reg_query(_split_key(k)[0]).get(_split_key(k)[1]) for k in regkeys) if regkeys else cp.returncode == 0
+        installed_ok = (not stalled) and rc == 0 and (any(p.reg_query(_split_key(k)[0]).get(_split_key(k)[1]) for k in regkeys) if regkeys else True)
         if installed_ok:
             r.ok(f"installer succeeded ({time.time()-t0:.0f}s)")
             if not keep_trace: trace.unlink(missing_ok=True)
             return {"name": name, "method": "installer", "regkeys": regkeys}
-        r.fail(f"installer exit {cp.returncode}; falling back to manual deploy")
+        if stalled: r.fail("installer stopped making progress; falling back to manual deploy")
+        else:       r.fail(f"installer exit {rc}; falling back to manual deploy")
         if not roots: raise RuntimeError("trace has no destination roots; cannot deploy")
         r.step("Extracting installer payload"); bag = work / "bag"; bag.mkdir()
         subprocess.run(["7z", "x", "-y", f"-o{bag}", str(exe)], check=True, capture_output=True)
@@ -233,6 +258,37 @@ def _find_download(p: Prefix, name: str) -> Path | None:
             if f.suffix.lower() in (".zip", ".exe") and key in re.sub(r"[^a-z0-9]", "", f.name.lower()):
                 return f
     return None
+
+# Setup exes Native Access runs itself. It drives these, so a stall leaves NA
+# showing "Installing…" forever with nothing to click.
+_SETUP_EXE_HINT = "Setup PC.exe"
+
+def stalled_na_install(p: Prefix, watch=None, quiet_seconds: float = 300.0):
+    """An InstallAware setup that Native Access started and that has stopped
+    making progress, or None. Keep the returned watch and pass it back on the
+    next call: the judgement needs history, not a single sample."""
+    from .stall import StallWatch
+    pids = [pid for pid, cmd in p.processes() if _SETUP_EXE_HINT.lower() in cmd.lower()]
+    if watch is None: watch = StallWatch(quiet_seconds=quiet_seconds)
+    stalled = watch.update(pids)
+    return (watch, stalled, pids)
+
+def rescue_stalled_na_install(p: Prefix, reporter=None) -> list[dict]:
+    """Kill a stalled NI setup and finish the install from what it already staged.
+
+    Native Access runs these installers itself, so when one wedges (payload
+    unpacked, then zero CPU forever) nothing else can complete it: the staged
+    mia*.tmp folder is held open by the dead-in-the-water process. Killing it
+    first is what makes finish_staged_installs() able to see the work."""
+    r = null_reporter(reporter)
+    killed = []
+    for pid, cmd in p.processes():
+        if _SETUP_EXE_HINT.lower() in cmd.lower():
+            r.step(f"Stopping the stalled installer (pid {pid})")
+            try: os.kill(pid, 9); killed.append(pid); r.ok()
+            except OSError as e: r.fail(str(e))
+    if killed: time.sleep(2)
+    return finish_staged_installs(p, r)
 
 def finish_staged_installs(p: Prefix, reporter=None) -> list[dict]:
     """Complete every install Native Access left half-done. Prefers re-running the

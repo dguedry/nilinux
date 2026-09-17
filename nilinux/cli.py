@@ -127,6 +127,13 @@ def cmd_dxvk(a):
 def cmd_prefixes(a):
     p = _prefix(); print(prefixes.report(p, na.NTK_PORTS, yabridge.status(p)))
 
+def cmd_rescue(a):
+    """Kill an installer that has stopped responding and finish it from what it staged."""
+    p = _prefix(); r = ConsoleReporter()
+    res = products.rescue_stalled_na_install(p, r)
+    if not res: print("nothing to finish (no staged install found)")
+    for x in res: print(f"  {x.get('name')}: {x.get('method')}")
+
 def cmd_finish_installs(a):
     p = _prefix(); r = ConsoleReporter()
     staged = products.staged_installs(p)
@@ -170,6 +177,7 @@ def main(argv=None):
     s.add_argument("action", nargs="?", default="install", choices=["install", "remove", "status"])
     s.add_argument("--force", action="store_true", help="reinstall even if the pinned version is already there")
     s.set_defaults(f=cmd_dxvk)
+    sp.add_parser("rescue-install", help="an NI installer has stopped responding: stop it and finish the install from its downloaded payload").set_defaults(f=cmd_rescue)
     sp.add_parser("prefixes", help="which nilinux prefixes exist, which one runs the NI daemon, what yabridge points at").set_defaults(f=cmd_prefixes)
     s = sp.add_parser("finish-installs", help="complete installs Native Access started but did not finish")
     s.add_argument("--no-sync", action="store_true"); s.set_defaults(f=cmd_finish_installs)

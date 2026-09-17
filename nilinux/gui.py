@@ -247,6 +247,23 @@ class Window(Adw.ApplicationWindow):
         self.toast("Native Access is starting…")
         import time; t0 = time.time()
         def watch():
+            # While NA runs, watch for an InstallAware setup that has stopped making
+            # progress. NA drives these itself, so a stalled one leaves it showing
+            # "Installing…" with nothing the user can do; finishing it from the
+            # payload it already unpacked is the rescue.
+            w = None
+            while proc.poll() is None:
+                try:
+                    w, stalled, pids = products.stalled_na_install(self.prefix, w)
+                    if stalled and pids:
+                        w = None                       # judge afresh after intervening
+                        ui(lambda: self.run_bg("An installer stopped responding — finishing it",
+                                               lambda r: (products.rescue_stalled_na_install(self.prefix, r),
+                                                          products.register_all_libraries(self.prefix, r),
+                                                          yabridge.sync(self.prefix, r))))
+                except Exception:
+                    pass
+                time.sleep(15)
             proc.wait()
             if time.time() - t0 < 15:
                 # exited at once: NA was already running (its single-instance logic focused it)

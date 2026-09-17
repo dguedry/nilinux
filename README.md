@@ -197,6 +197,7 @@ Each of these was diagnosed from a real failure.
 | NA's installer/updater exits with code 2 | NSIS package does not run under Wine | Extracts `app-64.7z` from the installer instead |
 | "Requires Kontakt … no viable version installed" although Kontakt Player is installed | NA prefers an *owned* full Kontakt over the installed Player | Patches the renderer's dependency selector so an installed viable product wins |
 | NI app installers fail ("Setup has failed: FALSE") | InstallAware queries an MSI virtual table Wine's SQL parser rejects | Runs the installer silently under an MSI trace; if it fails, deploys the payload from the trace's destination map and writes the registry keys |
+| An NI install never finishes: Native Access shows "Installing…" for hours, the setup process sits at 0% CPU after writing its payload, and *Finish interrupted installs* does nothing | The InstallAware setup wedges instead of failing, so no exit code ever arrives and the staged `mia*.tmp` folder stays held open by the stuck process | Watches running setups: no CPU **and** no disk writes for five minutes means stalled, so it is stopped and the install finished from the payload it already unpacked. Applies to this app's own installs and, while Native Access runs, to the ones it drives itself; `nilinux rescue-install` does it by hand |
 | Library installed but invisible in Kontakt | Daemon skipped the HKLM key Kontakt scans | Writes `ContentDir`/`HU`/`JDX` from the daemon's record and NI's catalogue |
 | NI apps freeze each other | Boost named mutexes are not crash-safe | Clears stale mutex files when no NI app runs |
 | Native Access quits within a second of starting ("GPU process launch failed: error_code=39", "Network service crashed", "GPU process isn't usable. Goodbye."), or its renderer dies at once (`render-process-gone`, exit 258) and the wineserver then spins at 100% CPU with every Wine process hung; a Kontakt loaded in a DAW dies the same way when the app started the wineserver | The prefix's wineserver ran in a different **pid namespace** from the client: started by a DAW's plugin on the host while the app ran in its sandbox, or by another `flatpak run` instance. wineserver addresses clients by pid (`tgkill`, `ptrace`, `process_vm_readv`), so such a client never gets its APCs or thread suspends | Wine runs on the host for the sandbox too (`flatpak-spawn --host`, the app's own build), so server and every client share the host namespace; Health checks *Wine runs on the host* and *wineserver reachable from here*; `launch` refuses instead of crashing if a server it cannot reach holds the prefix; `--no-sandbox` kept as well |
@@ -227,6 +228,8 @@ nilinux/
                      asar patcher (dependency check, auto-update off)
   products.py        NI catalogue, installed products, library registration,
                      silent-install-or-trace-deploy for NI apps, third-party installers
+  stall.py           is a running installer still doing anything? (CPU + bytes
+                     written, conservatively: no information never means "kill it")
   yabridge.py        install, plugin-dir discovery, sync, DAW environment
   doctor.py, cli.py, gui.py (GTK4 + libadwaita), msi.py, download.py, progress.py
 flatpak/             manifest (GNOME 50 runtime; bundles 7-Zip, cabextract, olefile), build.sh
