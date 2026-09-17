@@ -253,8 +253,6 @@ class Window(Adw.ApplicationWindow):
         r.add_suffix(Gtk.Image(icon_name="view-refresh-symbolic")); r.connect("activated", lambda *_: self.sync()); g.add(r)
         r = Adw.ActionRow(title="Finish interrupted installs", subtitle="Complete an NI install that Native Access started but did not finish (Health lists them).", activatable=True)
         r.add_suffix(Gtk.Image(icon_name="emblem-synchronizing-symbolic")); r.connect("activated", lambda *_: self.finish_installs()); g.add(r)
-        r = Adw.ActionRow(title="Save a diagnostic report", subtitle="A file to attach when reporting a problem. Serials, licence tokens and your home path are removed.", activatable=True)
-        r.add_suffix(Gtk.Image(icon_name="document-save-symbolic")); r.connect("activated", lambda *_: self.save_report()); g.add(r)
         page.add(g)
         return page
     def save_report(self):
@@ -333,6 +331,13 @@ class Window(Adw.ApplicationWindow):
     def build_health(self):
         page = Adw.PreferencesPage()
         self.health_group = Adw.PreferencesGroup(title="Checks"); page.add(self.health_group); self._rows[self.health_group] = []
+        g = Adw.PreferencesGroup(title="Reporting a problem",
+                                 description="If a check above cannot be fixed, send this with your report.")
+        r = Adw.ActionRow(title="Save a diagnostic report",
+                          subtitle="Writes a file to your home folder: this app's state and logs, with serials, licence tokens and your home path removed.",
+                          activatable=True)
+        r.add_suffix(Gtk.Image(icon_name="document-save-symbolic")); r.connect("activated", lambda *_: self.save_report()); g.add(r)
+        page.add(g)
         return page
     def refresh_health(self):
         # The checks take ~12s in total (several start Wine or probe ports), so they
