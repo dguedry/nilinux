@@ -4,6 +4,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from . import paths, wine, native_access as na, yabridge, products, prefixes, dxvk, host
 
+class _Checks(list):
+    """A list that reports each Check to a callback as it is appended."""
+    def __init__(self, on_check=None):
+        super().__init__(); self._on = on_check
+    def append(self, item):
+        super().append(item)
+        if self._on is not None:
+            try: self._on(item)
+            except Exception: pass
+
 @dataclass
 class Check:
     name: str
@@ -11,8 +21,13 @@ class Check:
     detail: str = ""
     fix: str = ""        # CLI command that repairs it
 
-def run(p: wine.Prefix | None = None) -> list[Check]:
-    c: list[Check] = []
+def run(p: wine.Prefix | None = None, on_check=None) -> list[Check]:
+    """Every health check. Takes ~12s: several checks start Wine or probe ports.
+
+    `on_check` is called with each Check as it completes, so a UI can show
+    results as they arrive instead of a blank page until the last one lands.
+    """
+    c = _Checks(on_check)
     for tool in ("7z", "cabextract"):
         c.append(Check(f"host tool: {tool}", bool(shutil.which(tool)), fix=f"install {tool} with your package manager"))
     try: import olefile; c.append(Check("python: olefile", True))

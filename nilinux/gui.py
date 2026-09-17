@@ -61,7 +61,12 @@ class Window(Adw.ApplicationWindow):
         self.stack.add_titled_with_icon(self.build_programs(), "programs", "Programs", "application-x-executable-symbolic")
         self.stack.add_titled_with_icon(self.build_install(), "install", "Install", "list-add-symbolic")
         self.stack.add_titled_with_icon(self.build_health(), "health", "Health", "emblem-ok-symbolic")
-        self.task = TaskPage("Working"); self.stack.add_titled_with_icon(self.task, "task", "Progress", "content-loading-symbolic")
+        self.task = TaskPage("Working")
+        # Progress is where a running task reports; empty the rest of the time, so it
+        # is hidden until there is something to show rather than inviting a click on
+        # a blank page.
+        self.task_page = self.stack.add_titled_with_icon(self.task, "task", "Progress", "content-loading-symbolic")
+        self.task_page.set_visible(False)
         self.stack.add_named(self.build_get_na(), "getna")   # not in the switcher; shown until NA is installed
         b = wine.installed_build(); self.prefix = wine.Prefix(paths.PREFIX, b) if b else None
         if not self.is_ready(): self.run_setup(first=True)
@@ -77,7 +82,7 @@ class Window(Adw.ApplicationWindow):
     def run_bg(self, title, fn, done=None):
         """Run fn(reporter) in a thread on the Progress page."""
         if self.busy: self.toast("Another task is still running"); return
-        self.busy = True; self.task.reset(title); self.stack.set_visible_child_name("task")
+        self.busy = True; self.task.reset(title); self.task_page.set_visible(True); self.stack.set_visible_child_name("task")
         def worker():
             err = None
             try: result = fn(self.task.reporter)
@@ -87,6 +92,10 @@ class Window(Adw.ApplicationWindow):
                 if err: self.task.reporter.step(f"Error: {err}"); self.task.reporter.fail()
                 if done: done(result, err)
                 self.refresh_all()
+                # leave the page up on failure so the log can be read; on success the
+                # user is done with it, so return them to where they were
+                if err is None:
+                    GLib.timeout_add_seconds(3, self._hide_task_page)
             ui(finish)
         threading.Thread(target=worker, daemon=True).start()
 
@@ -139,6 +148,12 @@ class Window(Adw.ApplicationWindow):
         page.add(self.bridged_group)
         self._rows = {self.products_group: [], self.bridged_group: []}
         return box
+    def _hide_task_page(self):
+        if not self.busy and self.stack.get_visible_child_name() == "task":
+            self.stack.set_visible_child_name("plugins")
+        if not self.busy: self.task_page.set_visible(False)
+        return False            # one-shot timeout
+
     def _fill(self, group, rows):
         for r in self._rows[group]: group.remove(r)
         self._rows[group] = []
@@ -320,15 +335,29 @@ class Window(Adw.ApplicationWindow):
         self.health_group = Adw.PreferencesGroup(title="Checks"); page.add(self.health_group); self._rows[self.health_group] = []
         return page
     def refresh_health(self):
+        # The checks take ~12s in total (several start Wine or probe ports), so they
+        # are shown as they arrive: a blank page for that long reads as broken.
+        token = self._health_token = getattr(self, "_health_token", 0) + 1
+        def add_row(c):
+            if token != self._health_token: return          # a newer refresh won the race
+            if not self._health_started:
+                self._health_started = True
+                self._fill(self.health_group, [])            # clear "Checking…" on the first result
+            row = Adw.ActionRow(title=c.name, subtitle=GLib.markup_escape_text(c.detail + (f"  ·  fix: {c.fix}" if not c.ok and c.fix else "")))
+            row.add_suffix(Gtk.Image(icon_name="emblem-ok-symbolic" if c.ok else "dialog-warning-symbolic"))
+            self.health_group.add(row); self._rows[self.health_group].append(row)
+
+        self._health_started = False
+        spinner = Adw.ActionRow(title="Checking…", subtitle="Starting Wine and probing the prefix; results appear as they finish.")
+        spinner.add_suffix(Gtk.Spinner(spinning=True))
+        self._fill(self.health_group, [spinner])
+
         def work():
-            checks = doctor.run(self.prefix)
-            def show():
-                rows = []
-                for c in checks:
-                    row = Adw.ActionRow(title=c.name, subtitle=GLib.markup_escape_text(c.detail + (f"  ·  fix: {c.fix}" if not c.ok and c.fix else "")))
-                    row.add_suffix(Gtk.Image(icon_name="emblem-ok-symbolic" if c.ok else "dialog-warning-symbolic")); rows.append(row)
-                self._fill(self.health_group, rows)
-            ui(show)
+            doctor.run(self.prefix, on_check=lambda c: ui(lambda c=c: add_row(c)))
+            def done():
+                if token != self._health_token: return
+                if not self._health_started: self._fill(self.health_group, [])   # no checks at all
+            ui(done)
         threading.Thread(target=work, daemon=True).start()
     def refresh_version_notice(self):
         if not self.is_ready(): return
@@ -354,7 +383,7 @@ class App(Adw.Application):
         for name, cb in (("setup", lambda *_: self.win.run_setup()), ("dawenv", lambda *_: self.win.run_bg("DAW environment", lambda r: yabridge.configure_daw_environment(self.win.prefix, r))), ("about", self.about)):
             act = Gio.SimpleAction(name=name); act.connect("activate", cb); self.add_action(act)
         # Ctrl+1..5 switch tabs (keyboard access to the view switcher)
-        for i, page in enumerate(("plugins", "programs", "install", "health", "task"), start=1):
+        for i, page in enumerate(("plugins", "programs", "install", "health"), start=1):
             act = Gio.SimpleAction(name=f"tab{i}"); act.connect("activate", lambda *_, p=page: self.win.stack.set_visible_child_name(p))
             self.add_action(act); self.set_accels_for_action(f"app.tab{i}", [f"<Control>{i}"])
     def do_activate(self):
