@@ -70,7 +70,14 @@ def vulkan_devices() -> list[dict]:
     # radeon, ...) on every machine, so their presence says nothing about the
     # hardware present -- a VM with no GPU lists a dozen of them.
     out.extend(_devices_via_loader())
-    return out
+    # The same physical device can be enumerated more than once when several ICD
+    # manifests point at it, which is normal inside a Flatpak sandbox.
+    seen, unique = set(), []
+    for d in out:
+        key = (d["name"], d["software"])
+        if key in seen: continue
+        seen.add(key); unique.append(d)
+    return unique
 
 def _devices_via_loader() -> list[dict]:
     """Enumerate Vulkan devices through libvulkan directly."""
