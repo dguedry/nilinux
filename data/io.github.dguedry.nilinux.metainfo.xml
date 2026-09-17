@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.24" date="2026-09-17">
+      <description>
+        <p>Health shows results as they arrive; Progress only appears when it is used</p>
+      </description>
+    </release>
     <release version="0.1.23" date="2026-09-17">
       <description>
         <p>Vulkan: one entry per device</p>
