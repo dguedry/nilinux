@@ -19,6 +19,8 @@ class GuiReporter(Reporter):
     ICON = {OK: "emblem-ok-symbolic", FAIL: "dialog-error-symbolic", SKIP: "radio-symbolic", RUN: "content-loading-symbolic"}
     def __init__(self, group: Adw.PreferencesGroup, log: Gtk.TextBuffer, progress: Gtk.ProgressBar | None = None):
         super().__init__(); self.group, self.logbuf, self.bar = group, log, progress; self.rows = {}
+        self._downloading = False
+        self.on_log_line = None
     def on_step(self, s):
         def go():
             row = self.rows.get(id(s))
@@ -27,10 +29,26 @@ class GuiReporter(Reporter):
                 self.group.add(row); self.rows[id(s)] = row
             row.img.set_from_icon_name(self.ICON[s.status]); row.set_subtitle(s.detail or "")
             if s.status == FAIL: row.add_css_class("error")
+            # Only downloads report bytes; everything else would leave the bar at zero
+            # for the whole task. The number of steps is not known in advance, so a
+            # fraction would jump about as steps are discovered: pulse instead, and
+            # name the step that is running, which is the useful part.
+            if self.bar is not None and not self._downloading:
+                if s.status == RUN:
+                    self.bar.set_text(s.name); self.bar.pulse()
+                else:
+                    done = sum(1 for x in self.steps if x.status != RUN)
+                    self.bar.set_text(f"{done} step{'s' if done != 1 else ''} done")
         ui(go)
-    def on_log(self, line): ui(lambda: self.logbuf.insert(self.logbuf.get_end_iter(), line + "\n"))
+    def on_log(self, line):
+        def go():
+            self.logbuf.insert(self.logbuf.get_end_iter(), line + "\n")
+            if self.on_log_line is not None: self.on_log_line()      # reveal the Details pane
+        ui(go)
     def on_progress(self, done, total, label):
-        if self.bar and total: ui(lambda: (self.bar.set_fraction(done / total), self.bar.set_text(f"{label} {done/1e6:.0f}/{total/1e6:.0f} MB")))
+        if not self.bar or not total: return
+        self._downloading = done < total
+        ui(lambda: (self.bar.set_fraction(done / total), self.bar.set_text(f"{label} {done/1e6:.0f}/{total/1e6:.0f} MB")))
 
 class TaskPage(Gtk.Box):
     """Step list + progress bar + collapsible log; used by setup and installs."""
@@ -39,11 +57,17 @@ class TaskPage(Gtk.Box):
         self.group = Adw.PreferencesGroup(title=title); self.append(self.group)
         self.bar = Gtk.ProgressBar(show_text=True); self.append(self.bar)
         self.logbuf = Gtk.TextBuffer(); tv = Gtk.TextView(buffer=self.logbuf, editable=False, monospace=True)
-        sw = Gtk.ScrolledWindow(min_content_height=140, child=tv); exp = Gtk.Expander(label="Details", child=sw); self.append(exp)
+        sw = Gtk.ScrolledWindow(min_content_height=140, child=tv)
+        # Most tasks log nothing (the step list carries the detail), so an always-present
+        # "Details" expander just invites opening an empty pane. It appears if a line arrives.
+        self.details = Gtk.Expander(label="Details", child=sw, visible=False); self.append(self.details)
         self.reporter = GuiReporter(self.group, self.logbuf, self.bar)
+        self.reporter.on_log_line = lambda: self.details.set_visible(True)
     def reset(self, title=None):
         for r in list(self.reporter.rows.values()): self.group.remove(r)
         self.reporter.rows.clear(); self.reporter.steps.clear(); self.bar.set_fraction(0); self.bar.set_text("")
+        self.reporter._downloading = False
+        self.logbuf.set_text(""); self.details.set_visible(False)
         if title: self.group.set_title(title)
 
 class Window(Adw.ApplicationWindow):
