@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.26" date="2026-09-17">
+      <description>
+        <p>Progress page: make the bar and the log mean something</p>
+      </description>
+    </release>
     <release version="0.1.25" date="2026-09-17">
       <description>
         <p>Move 'Save a diagnostic report' to the Health page</p>
