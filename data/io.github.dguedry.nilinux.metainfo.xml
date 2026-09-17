@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.23" date="2026-09-17">
+      <description>
+        <p>Vulkan: one entry per device</p>
+      </description>
+    </release>
     <release version="0.1.22" date="2026-09-17">
       <description>
         <p>A diagnostic report users can send, and real Vulkan detection</p>
