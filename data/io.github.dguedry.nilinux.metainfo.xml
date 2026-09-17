@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.22" date="2026-09-17">
+      <description>
+        <p>A diagnostic report users can send, and real Vulkan detection</p>
+      </description>
+    </release>
     <release version="0.1.21" date="2026-09-17">
       <description>
         <p>Notice an NI installer that has stalled, and finish it from what it staged</p>
