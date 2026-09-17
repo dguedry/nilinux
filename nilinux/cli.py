@@ -127,6 +127,18 @@ def cmd_dxvk(a):
 def cmd_prefixes(a):
     p = _prefix(); print(prefixes.report(p, na.NTK_PORTS, yabridge.status(p)))
 
+def cmd_report(a):
+    """Write a diagnostic bundle to attach to a bug report."""
+    from . import report
+    b = wine.installed_build()
+    p = wine.Prefix(paths.PREFIX, b) if b else None
+    if a.summary_only:
+        print(report.summary(p)); return
+    dest = report.write_bundle(Path(a.output) if a.output else None, p)
+    print(f"wrote {dest}")
+    print("It contains a summary and this app's logs, with serials, licence tokens and your")
+    print("home directory removed. Please attach it to the issue.")
+
 def cmd_rescue(a):
     """Kill an installer that has stopped responding and finish it from what it staged."""
     p = _prefix(); r = ConsoleReporter()
@@ -177,6 +189,10 @@ def main(argv=None):
     s.add_argument("action", nargs="?", default="install", choices=["install", "remove", "status"])
     s.add_argument("--force", action="store_true", help="reinstall even if the pinned version is already there")
     s.set_defaults(f=cmd_dxvk)
+    s = sp.add_parser("report", help="write a diagnostic bundle to send with a bug report")
+    s.add_argument("-o", "--output", help="where to write it (default: ~/nilinux-report-<date>.tar.gz)")
+    s.add_argument("--summary-only", action="store_true", help="print the summary instead of writing a file")
+    s.set_defaults(f=cmd_report)
     sp.add_parser("rescue-install", help="an NI installer has stopped responding: stop it and finish the install from its downloaded payload").set_defaults(f=cmd_rescue)
     sp.add_parser("prefixes", help="which nilinux prefixes exist, which one runs the NI daemon, what yabridge points at").set_defaults(f=cmd_prefixes)
     s = sp.add_parser("finish-installs", help="complete installs Native Access started but did not finish")

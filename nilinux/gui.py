@@ -238,8 +238,18 @@ class Window(Adw.ApplicationWindow):
         r.add_suffix(Gtk.Image(icon_name="view-refresh-symbolic")); r.connect("activated", lambda *_: self.sync()); g.add(r)
         r = Adw.ActionRow(title="Finish interrupted installs", subtitle="Complete an NI install that Native Access started but did not finish (Health lists them).", activatable=True)
         r.add_suffix(Gtk.Image(icon_name="emblem-synchronizing-symbolic")); r.connect("activated", lambda *_: self.finish_installs()); g.add(r)
+        r = Adw.ActionRow(title="Save a diagnostic report", subtitle="A file to attach when reporting a problem. Serials, licence tokens and your home path are removed.", activatable=True)
+        r.add_suffix(Gtk.Image(icon_name="document-save-symbolic")); r.connect("activated", lambda *_: self.save_report()); g.add(r)
         page.add(g)
         return page
+    def save_report(self):
+        from . import report
+        def fn(r):
+            r.step("Collecting diagnostics")
+            dest = report.write_bundle(p=self.prefix)
+            r.ok(str(dest))
+            return dest
+        self.run_bg("Saving a diagnostic report", fn)
     def open_na(self):
         if not self.is_ready(): self.toast("Run setup first"); return
         try: proc = na.launch(self.prefix)

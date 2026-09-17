@@ -62,6 +62,24 @@ class VulkanDetectionTest(unittest.TestCase):
             ok, detail = dxvk.vulkan_ok()
             self.assertFalse(ok); self.assertIn("software rendering", detail)
 
+    def test_icd_manifests_are_not_evidence_of_hardware(self):
+        """Regression: Mesa ships a manifest per GPU family on every machine, so
+        counting them said a GPU-less VM had twelve devices. Only devices the
+        Vulkan loader actually enumerates count."""
+        with mock.patch.object(dxvk.shutil, "which", return_value=None), \
+             mock.patch.object(dxvk, "_devices_via_loader", return_value=[]):
+            self.assertEqual(dxvk.vulkan_devices(), [])
+            ok, _ = dxvk.vulkan_ok()
+            self.assertFalse(ok)
+
+    def test_loader_reporting_only_llvmpipe_is_not_usable(self):
+        """A VM with no GPU: the loader enumerates llvmpipe (device type 4)."""
+        with mock.patch.object(dxvk.shutil, "which", return_value=None), \
+             mock.patch.object(dxvk, "_devices_via_loader",
+                               return_value=[{"name": "llvmpipe (LLVM 21.1.8, 256 bits)", "type": "type 4", "software": True}]):
+            ok, detail = dxvk.vulkan_ok()
+            self.assertFalse(ok); self.assertIn("software rendering", detail)
+
     def test_no_vulkan_at_all_names_the_package(self):
         with mock.patch.object(dxvk.shutil, "which", return_value=None), \
              mock.patch.object(dxvk, "vulkan_devices", return_value=[]):

@@ -63,17 +63,61 @@ def vulkan_devices() -> list[dict]:
             flush()
             if out: return out
         except (OSError, subprocess.SubprocessError): pass
-    # No vulkaninfo (it lives in vulkan-tools, often not installed): fall back to
-    # the ICD manifests the loader itself reads.
-    for d in ("/usr/share/vulkan/icd.d", "/usr/local/share/vulkan/icd.d",
-              str(Path.home() / ".local/share/vulkan/icd.d")):
-        for icd in sorted(Path(d).glob("*.json")) if Path(d).is_dir() else []:
-            try: lib = json.loads(icd.read_text()).get("ICD", {}).get("library_path", "")
-            except (OSError, ValueError): continue
-            stem = icd.stem.replace("_icd", "")
-            software = any(s in (stem + lib).lower() for s in SOFTWARE_RENDERERS) or stem == "lvp"
-            out.append({"name": stem, "type": "ICD manifest", "software": software})
+    # No vulkaninfo (it lives in vulkan-tools and is often absent). Ask the Vulkan
+    # loader itself through ctypes: enumerate physical devices and read their type.
+    # Note what does NOT work here: counting ICD manifests in /usr/share/vulkan.
+    # Mesa ships a manifest for every GPU family it supports (asahi, panfrost,
+    # radeon, ...) on every machine, so their presence says nothing about the
+    # hardware present -- a VM with no GPU lists a dozen of them.
+    out.extend(_devices_via_loader())
     return out
+
+def _devices_via_loader() -> list[dict]:
+    """Enumerate Vulkan devices through libvulkan directly."""
+    import ctypes
+    try: lib = ctypes.CDLL("libvulkan.so.1")
+    except OSError: return []
+
+    class AppInfo(ctypes.Structure):
+        _fields_ = [("sType", ctypes.c_int), ("pNext", ctypes.c_void_p), ("pApplicationName", ctypes.c_char_p),
+                    ("applicationVersion", ctypes.c_uint32), ("pEngineName", ctypes.c_char_p),
+                    ("engineVersion", ctypes.c_uint32), ("apiVersion", ctypes.c_uint32)]
+    class InstInfo(ctypes.Structure):
+        _fields_ = [("sType", ctypes.c_int), ("pNext", ctypes.c_void_p), ("flags", ctypes.c_uint32),
+                    ("pApplicationInfo", ctypes.POINTER(AppInfo)), ("enabledLayerCount", ctypes.c_uint32),
+                    ("ppEnabledLayerNames", ctypes.c_void_p), ("enabledExtensionCount", ctypes.c_uint32),
+                    ("ppEnabledExtensionNames", ctypes.c_void_p)]
+    # VkPhysicalDeviceProperties: the fields we need are at the front, then a 256-byte name
+    class Props(ctypes.Structure):
+        _fields_ = [("apiVersion", ctypes.c_uint32), ("driverVersion", ctypes.c_uint32),
+                    ("vendorID", ctypes.c_uint32), ("deviceID", ctypes.c_uint32),
+                    ("deviceType", ctypes.c_uint32), ("deviceName", ctypes.c_char * 256),
+                    ("pipelineCacheUUID", ctypes.c_uint8 * 16), ("limits", ctypes.c_uint8 * 504),
+                    ("sparseProperties", ctypes.c_uint8 * 20)]
+
+    app = AppInfo(0, None, b"nilinux", 1, b"nilinux", 1, 1 << 22)      # VK_API_VERSION_1_0
+    info = InstInfo(1, None, 0, ctypes.pointer(app), 0, None, 0, None)  # INSTANCE_CREATE_INFO
+    inst = ctypes.c_void_p()
+    if lib.vkCreateInstance(ctypes.byref(info), None, ctypes.byref(inst)) != 0: return []
+    try:
+        n = ctypes.c_uint32(0)
+        if lib.vkEnumeratePhysicalDevices(inst, ctypes.byref(n), None) != 0 or n.value == 0: return []
+        devs = (ctypes.c_void_p * n.value)()
+        if lib.vkEnumeratePhysicalDevices(inst, ctypes.byref(n), devs) != 0: return []
+        found = []
+        for d in devs[:n.value]:
+            pr = Props()
+            lib.vkGetPhysicalDeviceProperties(ctypes.c_void_p(d), ctypes.byref(pr))
+            name = pr.deviceName.decode(errors="replace").strip("\x00")
+            # VK_PHYSICAL_DEVICE_TYPE_CPU == 4
+            found.append({"name": name, "type": f"type {pr.deviceType}",
+                          "software": pr.deviceType == 4 or any(sw in name.lower() for sw in SOFTWARE_RENDERERS)})
+        return found
+    except Exception:
+        return []
+    finally:
+        try: lib.vkDestroyInstance(inst, None)
+        except Exception: pass
 
 def vulkan_ok() -> tuple[bool, str]:
     """(usable, detail). Usable means at least one hardware Vulkan device."""

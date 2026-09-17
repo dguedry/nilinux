@@ -230,6 +230,8 @@ nilinux/
                      silent-install-or-trace-deploy for NI apps, third-party installers
   stall.py           is a running installer still doing anything? (CPU + bytes
                      written, conservatively: no information never means "kill it")
+  report.py          the diagnostic bundle users attach to bug reports (scrubbed
+                     of serials, licence tokens and the home path)
   yabridge.py        install, plugin-dir discovery, sync, DAW environment
   doctor.py, cli.py, gui.py (GTK4 + libadwaita), msi.py, download.py, progress.py
 flatpak/             manifest (GNOME 50 runtime; bundles 7-Zip, cabextract, olefile), build.sh
@@ -274,6 +276,16 @@ arrive through the file-chooser portal; NA's default download location is
 pointed at `C:\users\Public\Downloads` when the configured one is unset or not
 writable. `yabridgectl` runs with the host's `XDG_CONFIG_HOME`/`XDG_DATA_HOME`
 because the sandbox remaps them.
+
+## Reporting a problem
+
+`nilinux report` writes `~/nilinux-report-<date>.tar.gz`, or use *Save a
+diagnostic report* on the Health page. It contains what this app knows about the
+machine, the prefix, Native Access, yabridge and DXVK, every Health check, any
+half-finished installs, and the tail of this app's own logs plus Native Access's.
+Serials, licence tokens (`ras3` JWTs) and your home directory are removed before
+anything is written. `nilinux report --summary-only` prints it instead, if you
+would rather paste it.
 
 ## Tested
 
