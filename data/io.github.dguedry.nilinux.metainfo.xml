@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.28" date="2026-09-18">
+      <description>
+        <p>Bridge new plugins while Native Access is still open</p>
+      </description>
+    </release>
     <release version="0.1.27" date="2026-09-17">
       <description>
         <p>Let a browser sign-in return to Native Access (native-access:// handler)</p>
