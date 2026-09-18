@@ -299,6 +299,8 @@ class Window(Adw.ApplicationWindow):
             # "Installing…" with nothing the user can do; finishing it from the
             # payload it already unpacked is the rescue.
             w = None
+            try: seen = yabridge.plugin_signature(self.prefix)
+            except Exception: seen = None
             while proc.poll() is None:
                 try:
                     w, stalled, pids = products.stalled_na_install(self.prefix, w)
@@ -310,6 +312,25 @@ class Window(Adw.ApplicationWindow):
                                                           yabridge.sync(self.prefix, r))))
                 except Exception:
                     pass
+
+                # Bridge new plugins while Native Access is still open. Waiting for
+                # it to exit is not enough: people install a product and leave NA
+                # running, then wonder why their DAW cannot see it. The plugin is
+                # installed, just not bridged, which looks like it failed.
+                try:
+                    if seen is not None:
+                        now = yabridge.plugin_signature(self.prefix)
+                        if now != seen and now:
+                            added = len(now - seen)
+                            seen = now
+                            if added:
+                                ui(lambda n=added: self.run_bg(
+                                    f"Bridging {n} newly installed plugin{'s' if n != 1 else ''}",
+                                    lambda r: (products.register_all_libraries(self.prefix, r),
+                                               yabridge.sync(self.prefix, r))))
+                except Exception:
+                    pass
+
                 time.sleep(15)
             proc.wait()
             if time.time() - t0 < 15:

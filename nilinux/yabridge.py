@@ -197,6 +197,31 @@ def plugin_dirs(p: Prefix, extras=()) -> list[Path]:
         add(d)
     return out
 
+def plugin_signature(p: Prefix) -> frozenset:
+    """What plugins exist in the prefix right now, cheap enough to poll.
+
+    Name and size only -- opening or hashing 175MB of Kontakt every few seconds
+    to answer "has anything appeared?" would be absurd. A plugin being replaced
+    by a different build of the same size is not something this needs to catch;
+    the exit-time sync covers that.
+    """
+    out = set()
+    pf = p.drive_c / "Program Files"
+    if not pf.is_dir():
+        return frozenset()
+    for f in pf.rglob("*"):
+        if f.suffix.lower() not in (".vst3", ".clap", ".dll"):
+            continue
+        if "Program Files (x86)" in str(f):
+            continue
+        try:
+            if len(f.relative_to(pf).parts) > 6:
+                continue
+            out.add((str(f), f.stat().st_size))
+        except OSError:
+            continue        # vanished or unreadable mid-scan: it will show up next time
+    return frozenset(out)
+
 def sync(p: Prefix, reporter=None, extras=()) -> dict:
     r = null_reporter(reporter)
     install(r)
