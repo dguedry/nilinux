@@ -1,7 +1,9 @@
 """Bridge the prefix's Windows plugins to Linux DAWs with yabridge.
 
-yabridge runs plugins with the `wine` on PATH (or WINELOADER). We point it at
-the app's own wine so prefix and plugin host can never drift apart.
+yabridge runs plugins with the `wine` on PATH (or WINELOADER). Its host
+launcher, which the app installs, is taught to run a prefix with the wine the
+prefix records, so prefix and plugin host can never drift apart while every
+other prefix keeps its own wine (see "which wine runs the plugin host").
 """
 import json, os, re, shutil, subprocess, tarfile
 from pathlib import Path
@@ -139,8 +141,14 @@ def _install_tarball(tgz: Path, r):
 
 def install(reporter=None, force=False) -> str:
     """Install yabridge, or replace an upstream release that cannot work with the
-    pinned Wine by nilinux's own build of yabridge master. Idempotent."""
+    pinned Wine by nilinux's own build of yabridge master; then make sure its
+    host launcher runs each prefix with the wine it records. Idempotent."""
     r = null_reporter(reporter)
+    res = _install(r, force)
+    ensure_host_launchers(r)
+    return res
+
+def _install(r, force) -> str:
     pinned = pinned_wine_version()
     marker = build_marker()
     if YCTL.exists() and not force:
@@ -227,8 +235,8 @@ def sync(p: Prefix, reporter=None, extras=()) -> dict:
     install(r)
     # Never hand plugins to a DAW that would run them with another Wine: its
     # prefix update replaces this prefix's DLLs (seen with the host's wine 9.0).
-    configure_daw_environment(p, r)
-    st, detail = daw_environment_status(p)
+    p.declare_wine(r)
+    st, detail = plugin_wine_status(p)
     if st != "active":
         r.step("Bridging plugins"); r.skip(f"not yet — {detail}")
         return {"dirs": [], "returncode": 0, "output": "", "summary": f"plugins not bridged: {detail}", "skipped": st}
@@ -266,105 +274,95 @@ def status(p: Prefix) -> str:
     if not YCTL.exists(): return "yabridge not installed"
     return subprocess.run([str(YCTL), "status"], capture_output=True, text=True, env=_yctl_env(p), timeout=120).stdout
 
-def daw_environment_file() -> Path:
-    """Legacy: an earlier release wrote WINELOADER here, which routed *every*
-    wine on the machine to the app's build. Removed by configure_daw_environment."""
-    return Path.home() / ".config/environment.d/50-nilinux.conf"
+# --- which wine runs the plugin host ---------------------------------------------------------------
+# yabridge starts its Windows-side plugin host through yabridge-host.exe, a
+# winegcc launcher script that runs `$WINELOADER` or else the `wine` on PATH.
+# By then libyabridge has set WINEPREFIX to the prefix it detected from the
+# plugin's location. The app installs that script, so it teaches it one thing
+# more: a prefix that records its wine in <prefix>/wineloader is run with that
+# wine (Prefix.declare_wine writes the record). Any other prefix, and an
+# explicit WINELOADER, behave exactly as upstream. Nothing goes on PATH and
+# nothing is set in the session, so this holds for every DAW however it is
+# started, and a wine the user already has (Proton, a distro package, their own
+# ~/.local/bin/wine) is never touched.
+HOST_LAUNCHERS = ("yabridge-host.exe", "yabridge-host-32.exe")
+LAUNCHER_MARK = "# nilinux: a prefix that records its wine in <prefix>/wineloader is run with that wine"
+_UPSTREAM_LOADER = 'if [ ! -x "$WINELOADER" ]; then WINELOADER="wine"; fi\n'
+_OUR_LOADER = f'''{LAUNCHER_MARK}
+if [ ! -x "$WINELOADER" ] && [ -n "$WINEPREFIX" ] && [ -r "$WINEPREFIX/{Prefix.WINELOADER_FILE}" ]; then
+    IFS= read -r WINELOADER < "$WINEPREFIX/{Prefix.WINELOADER_FILE}"
+    [ -x "$WINELOADER" ] && export WINEFSYNC=1    # the sync mode of every other client of this prefix's wineserver
+fi
+{_UPSTREAM_LOADER}'''
 
-WINE_SHIM = Path.home() / ".local/bin/wine"
-SHIM_MARK = "# nilinux: DAWs run yabridge plugins with the app's wine (same build as the prefix)"
+def host_launchers() -> list[Path]:
+    return [YAB_DIR / n for n in HOST_LAUNCHERS if (YAB_DIR / n).exists()]
+
+def patch_host_launcher(script: Path) -> str:
+    """'patched' | 'already' | 'unrecognised'. Same-directory atomic replace, mode kept."""
+    txt = script.read_text(errors="replace")
+    if LAUNCHER_MARK in txt: return "already"
+    if txt.count(_UPSTREAM_LOADER) != 1: return "unrecognised"
+    tmp = script.with_name(f".{script.name}.new")
+    tmp.write_text(txt.replace(_UPSTREAM_LOADER, _OUR_LOADER, 1)); tmp.chmod(script.stat().st_mode)
+    tmp.replace(script)
+    return "patched"
+
+def ensure_host_launchers(reporter=None) -> bool:
+    """Patch every installed host launcher. True when all of them honour the record."""
+    r = null_reporter(reporter)
+    r.step("Plugin hosts run each prefix with the wine it records")
+    ls = host_launchers()
+    if not ls: r.fail(f"no yabridge-host.exe in {YAB_DIR}"); return False
+    res = {l.name: patch_host_launcher(l) for l in ls}
+    bad = [n for n, st in res.items() if st == "unrecognised"]
+    if bad: r.fail(f"{', '.join(bad)}: not the winegcc launcher this app knows -- plugins would run with the host's wine"); return False
+    (r.ok if "patched" in res.values() else r.skip)(", ".join(f"{n} {st}" for n, st in res.items()))
+    return True
+
+def plugin_wine_status(p: Prefix) -> tuple[str, str]:
+    """('active' | 'missing', detail). active: a DAW's plugin host runs this prefix
+    with this wine (the prefix records it and the launcher honours the record).
+    missing: it would use the host's wine, whose prefix update rewrites the
+    app's prefix with another Wine's DLLs."""
+    try: rec = p.wineloader_file.read_text(errors="replace").strip()
+    except OSError: rec = ""
+    if rec != str(p.build.wine): return "missing", f"{p.wineloader_file} does not record this wine"
+    ls = host_launchers()
+    if not ls: return "missing", "yabridge is not installed"
+    plain = [l.name for l in ls if LAUNCHER_MARK not in l.read_text(errors="replace")]
+    if plain: return "missing", f"{', '.join(plain)} would run plugins with the host's wine (an upstream yabridge installed over the app's?)"
+    return "active", f"yabridge's host launcher reads {p.wineloader_file.name} and runs {p.build.root.name}; other prefixes keep their own wine"
+
+# --- what earlier releases did -----------------------------------------------------------------------------
+LEGACY_SHIM = Path.home() / ".local/bin/wine"
+LEGACY_SHIM_MARK = "# nilinux: DAWs run yabridge plugins with the app's wine (same build as the prefix)"
+
+def daw_environment_file() -> Path:
+    """Before 0.1.4: WINELOADER here routed *every* wine on the machine to the app's build."""
+    return Path.home() / ".config/environment.d/50-nilinux.conf"
 
 def legacy_daw_environment_content(p: Prefix) -> str:
     return f"WINELOADER={p.build.wine}\nWINEFSYNC=1\n"
 
-def shim_content(p: Prefix) -> str:
-    """A `wine` on PATH that routes by prefix: WINEPREFIX inside the app's prefix
-    runs the app's wine (yabridge sets WINEPREFIX from the plugin's location);
-    any other prefix -- ~/.wine, the user's own -- runs the next wine on PATH,
-    so a host Wine keeps serving its prefixes exactly as before. If the app's
-    wine is gone (uninstalled) everything falls through as well."""
-    return f"""#!/bin/sh
-{SHIM_MARK}
-# Only the nilinux prefix is routed to the app's wine. Every other prefix runs
-# the next wine on PATH after this file, so your own Wine keeps working.
-NILINUX_PREFIX="{p.path.resolve()}"
-NILINUX_WINE="{p.build.wine}"
-wp=$(cd "${{WINEPREFIX:-$HOME/.wine}}" 2>/dev/null && pwd -P)
-case "$wp" in
-  "$NILINUX_PREFIX"|"$NILINUX_PREFIX"/*)
-    if [ -x "$NILINUX_WINE" ]; then unset NILINUX_SHIM_SEEN; export WINEFSYNC=1; exec "$NILINUX_WINE" "$@"; fi ;;
-esac
-# Fall through to the next wine on PATH. Only shell builtins below: a DAW's
-# PATH may be minimal. NILINUX_SHIM_SEEN stops a fork loop if self-detection
-# ever fails (e.g. the shim reached through a path we cannot compare).
-case "$0" in */*) selfdir=${{0%/*}} ;; *) selfdir=. ;; esac
-self=$(cd "$selfdir" 2>/dev/null && pwd -P)
-if [ "${{NILINUX_SHIM_SEEN-}}" = "$self" ]; then
-  echo "wine: the nilinux shim $0 would run itself again; check PATH" >&2; exit 127
-fi
-export NILINUX_SHIM_SEEN="$self"
-IFS=:
-for d in $PATH; do
-  [ -n "$d" ] || d=.
-  [ "$d/wine" -ef "$0" ] && continue
-  [ "$(cd "$d" 2>/dev/null && pwd -P)" = "$self" ] && continue
-  if [ -f "$d/wine" ] && [ -x "$d/wine" ]; then unset IFS NILINUX_SHIM_SEEN; exec "$d/wine" "$@"; fi
-done
-echo "wine: command not found (the nilinux shim $0 found no other wine on PATH)" >&2
-exit 127
-"""
-
-def shim_is_ours(p: Prefix) -> bool:
-    f = WINE_SHIM
+def remove_legacy_routing(p: Prefix, reporter=None) -> bool:
+    """Releases up to 0.1.27 routed DAWs from outside the prefix: a ~/.local/bin/wine
+    shim (0.1.4+), before that the environment.d file. The prefix record replaces
+    both. Remove them only when they are the app's, and the shim only once the
+    record is in force, so nothing is ever left without a route."""
+    r = null_reporter(reporter); removed = []
     try:
-        if f.is_symlink(): return f.resolve() == p.build.wine.resolve()
-        if not f.is_file(): return False
-        txt = f.read_text(errors="replace")
-        return SHIM_MARK in txt and str(p.build.wine) in txt
-    except OSError: return False
-
-def configure_daw_environment(p: Prefix, reporter=None) -> bool:
-    """Make DAWs run this prefix's plugins with the app's wine: a ~/.local/bin/wine
-    shim that routes by prefix (see shim_content). yabridge resolves `wine`
-    through PATH, and ~/.local/bin precedes /usr/bin on Debian/Ubuntu/Mint/Fedora
-    desktops, so it is effective for every wine started from now on, no re-login.
-    Also removes the legacy environment.d WINELOADER file (it routed every prefix).
-    Returns True if anything was written."""
-    r = null_reporter(reporter)
-    r.step("DAWs use this wine for this prefix (~/.local/bin/wine shim)")
-    changed = False
-    shim = WINE_SHIM
-    if (shim.exists() or shim.is_symlink()) and not shim_is_ours(p):
-        try: cur = shim.read_text(errors="replace")
-        except OSError: cur = ""
-        if SHIM_MARK not in cur:
-            r.fail(f"{shim} exists and is not this app's — remove it, or point it at {p.build.wine}"); return False
-    if not shim_is_ours(p) or shim.read_text(errors="replace") != shim_content(p):
-        shim.parent.mkdir(parents=True, exist_ok=True)
-        if shim.is_symlink(): shim.unlink()
-        shim.write_text(shim_content(p)); shim.chmod(0o755); changed = True
-    f = daw_environment_file()
-    try:
-        if f.is_file() and f.read_text(errors="replace") == legacy_daw_environment_content(p):
-            f.unlink(); changed = True
+        f = daw_environment_file()
+        if f.is_file() and f.read_text(errors="replace") == legacy_daw_environment_content(p): f.unlink(); removed.append(str(f))
     except OSError: pass
-    (r.ok if changed else r.skip)(f"{shim} routes {p.path.name} -> {p.build.wine.name}; other prefixes keep their wine" if changed else "configured")
-    return changed
-
-def daw_environment_status(p: Prefix) -> tuple[str, str]:
-    """('active' | 'missing', detail).
-    active:  wine started by a DAW for this prefix is this wine (our shim in
-             ~/.local/bin, WINELOADER in this session, or the wine on PATH *is* it)
-    missing: not configured — a DAW would use the host's wine, whose prefix
-             update rewrites the app's prefix with another Wine's DLLs"""
-    want = str(p.build.wine)
-    if shim_is_ours(p): return "active", f"{WINE_SHIM} routes this prefix to this wine; other prefixes keep the wine after it on PATH (assumes ~/.local/bin precedes /usr/bin, the desktop default)"
-    if os.environ.get("WINELOADER") == want: return "active", "WINELOADER is set in this session (routes every prefix; the shim is preferred)"
-    host = shutil.which("wine")
-    try:
-        if host and Path(host).resolve() == p.build.wine.resolve(): return "active", "the wine on PATH is this wine"
-    except OSError: pass
-    return "missing", "not configured: a DAW would run plugins with the host's wine and rewrite the prefix"
+    if plugin_wine_status(p)[0] == "active":
+        try:
+            f = LEGACY_SHIM
+            ours = (f.resolve() == p.build.wine.resolve()) if f.is_symlink() else (f.is_file() and LEGACY_SHIM_MARK in f.read_text(errors="replace"))
+            if ours: f.unlink(); removed.append(str(f))
+        except OSError: pass
+    if removed: r.step("Removing the old wine routing"); r.ok(", ".join(removed))
+    return bool(removed)
 
 def broken_bundles() -> list[Path]:
     """yabridge VST3 bundles whose Windows plugin link no longer resolves (the

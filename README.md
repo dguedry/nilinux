@@ -81,23 +81,28 @@ the prefix, logs. Nothing is installed system-wide.
   audio software: programs that need .NET, an embedded browser or Direct3D will
   not run, and the page says so instead of adding those layers.
 - **Health** — every fix and prerequisite with a repair hint. The menu has
-  *Re-run setup / repair* and *Make DAWs use this wine*.
+  *Re-run setup / repair*.
 
-**DAWs must run plugins with the app's wine.** Setup installs a small
-`~/.local/bin/wine` shim that **routes by prefix**: when `WINEPREFIX` is the
-app's prefix (yabridge sets it from the plugin's location) it execs the app's
-wine with `WINEFSYNC=1`; for every other prefix (`~/.wine`, your own) it execs
-the next `wine` on PATH, so a Wine you already have keeps serving your own
-prefixes untouched, and if the app is uninstalled the shim falls through to it
-too. yabridge resolves `wine` through PATH, and `~/.local/bin` precedes
-`/usr/bin` on Debian, Ubuntu, Mint and Fedora desktops, so the shim takes effect
-for every wine started afterwards, with no re-login. Until it is active the app
-does not bridge plugins, and Health and the Plugins tab say so: a DAW using the
-host's own wine would run *its* prefix update on the app's prefix and replace
-the DLLs with another version's. If you already have your own
-`~/.local/bin/wine`, setup leaves it alone and tells you. (Releases before
-0.1.4 also wrote a global `WINELOADER` to `~/.config/environment.d`; setup
-removes that file.)
+**DAWs must run plugins with the app's wine.** A DAW loads a bridged plugin
+on the host, and yabridge starts the Windows-side plugin host through
+`yabridge-host.exe`, a small launcher script that runs `$WINELOADER` or else
+the `wine` on PATH; by then yabridge has set `WINEPREFIX` to the prefix it
+found the plugin in. The app installs that script, so setup teaches it one
+thing more: a prefix that records its wine in `<prefix>/wineloader` is run
+with that wine, with `WINEFSYNC=1` like every other client of the prefix's
+wineserver. Setup writes that record into the app's prefix. Any other prefix
+(`~/.wine`, a Bottles bottle, Proton) has no record and gets exactly upstream's
+behaviour, an explicit `WINELOADER` still wins, and if the app is uninstalled
+the recorded wine is gone and the launcher falls back to `wine`. Nothing is put
+on PATH and nothing is set in the session, so this holds for every DAW however
+it is started; bridged plugins are ordinary VST2/VST3/CLAP bundles under
+`~/.vst*`, and a `~/.local/bin/wine` you already have is never touched. Until
+the record and the launcher are in place the app does not bridge plugins, and
+Health and the Plugins tab say so: a DAW using the host's own wine would run
+*its* prefix update on the app's prefix and replace the DLLs with another
+version's. (Releases up to 0.1.27 routed through a `~/.local/bin/wine` shim,
+and before 0.1.4 through a session-wide `WINELOADER` in
+`~/.config/environment.d`; setup removes both when they are the app's.)
 - **Progress** — step list, download bar and log for long tasks.
 
 Bridged plugins land in `~/.vst/yabridge`, `~/.vst3/yabridge`,
@@ -127,7 +132,7 @@ this app starts: the sandbox runs them with `flatpak-spawn --host` (portal
 permission `org.freedesktop.Flatpak`). The binary is always the app's own
 pinned Wine build under the app's data directory, never the distribution's
 wine, so the prefix, Native Access, the NI installers and the DAW-side plugin
-hosts (through the `~/.local/bin/wine` shim) all run one and the same Wine in
+hosts (yabridge's launcher reads the prefix's `wineloader` record) all run one and the same Wine in
 one and the same namespace. Health's first check, *Wine runs on the host*,
 verifies that the portal is reachable.
 
@@ -204,7 +209,7 @@ Each of these was diagnosed from a real failure.
 | Every NI application install fails instantly in the Flatpak (daemon error 731; any 32-bit program: "Application could not be started") | Flatpak's seccomp filter blocks `modify_ldt`, which Wine's WoW64 layer needs for 32-bit code; NI's InstallAware setup exes are 32-bit | Manifest grants `--allow=multiarch`; Health checks that a 32-bit program runs |
 | Every download fails ("Download folder does not exist", "could not create new file") | A fresh prefix has no download location; Wine's `Downloads` folder is a symlink to the host's, which the sandbox mounts read-only | Points NA at `C:\users\Public\Downloads` inside the prefix whenever the configured location is unset or not writable (checked at setup and on every launch; a working custom location is kept) |
 | Cannot sign in to Native Instruments: the browser opens, you log in, and Native Access never comes back | NA finishes sign-in by redirecting to a `native-access://` link. Wine registers that scheme inside the prefix, but nothing registers it with the Linux desktop, so the browser has nowhere to send the callback | Installs a handler under `~/.local` (a `.desktop` file claiming the scheme and a script that passes the URL to Native Access in this prefix) during setup; Health checks it and `nilinux url-handler register` does it by hand |
-| Plugins refuse to load in a DAW ("prefix updated by a newer Wine") | Host wine older than the prefix's wine | One wine binary for both: setup installs a `~/.local/bin/wine` shim that routes the app's prefix to the app's wine and every other prefix to the host's; plugins are not bridged until it is active |
+| Plugins refuse to load in a DAW ("prefix updated by a newer Wine") | Host wine older than the prefix's wine | One wine binary for both: the prefix records its wine in `<prefix>/wineloader` and yabridge's host launcher (installed by the app) runs a prefix with the wine it records, every other prefix with the host's; plugins are not bridged until both are in place |
 | Mouse clicks in plugin GUIs land in the wrong place, in every DAW | yabridge 5.1.1 (the last release) with Wine ≥ 9.22; the fix is only in yabridge's master branch | CI builds yabridge master against the pinned Wine and the app installs that build; Health: *yabridge matches this wine* |
 | Plugins hang in every DAW; Health shows the NTK ports held by another prefix | Two nilinux prefixes (Flatpak and source install, or an old app id) both bridged; the daemon that owns the ports belongs to the other one | `sync` unregisters other nilinux prefixes' directories; Health names the daemon's prefix from the listener's `WINEPREFIX`; `nilinux prefixes` shows the whole picture |
 | A plugin vanished after Native Access updated it; the bridge link points at a missing file | NA's InstallAware update removed the old files and died before deploying the new ones | Finishes the install from the staged payload / kept download after NA exits, or via *Finish interrupted installs* |

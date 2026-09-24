@@ -75,6 +75,22 @@ class Prefix:
     @property
     def exists(self) -> bool: return (self.drive_c / "windows").exists()
 
+    # One line, the wine this prefix was built with. yabridge's host launcher reads
+    # it (see yabridge.py) so a DAW runs this prefix's plugins with this wine.
+    WINELOADER_FILE = "wineloader"
+    @property
+    def wineloader_file(self) -> Path: return self.path / self.WINELOADER_FILE
+
+    def declare_wine(self, reporter=None) -> bool:
+        """Record this prefix's wine in <prefix>/wineloader. Idempotent; True if written."""
+        r = null_reporter(reporter)
+        r.step("Recording the prefix's wine for plugin hosts")
+        want = f"{self.build.wine}\n"
+        try: cur = self.wineloader_file.read_text(errors="replace")
+        except OSError: cur = None
+        if cur == want: r.skip("recorded"); return False
+        self.wineloader_file.write_text(want); r.ok(str(self.build.wine)); return True
+
     def wine_env(self, extra: dict | None = None, debug="-all") -> dict:
         """Only the variables Wine needs: these are added to the *host* session
         environment when the sandbox runs Wine through flatpak-spawn (see host.py)."""

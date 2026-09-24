@@ -106,7 +106,6 @@ def cmd_install(a):
 def cmd_sync(a):
     p = _prefix(); r = ConsoleReporter()
     res = yabridge.sync(p, r, extras=a.dirs)
-    if a.daw_env: yabridge.configure_daw_environment(p, r)
     print(res["summary"])
 
 def cmd_status(a):
@@ -187,7 +186,7 @@ def main(argv=None):
     s.add_argument("installer"); s.add_argument("--third-party", action="store_true", help="run interactively (non-NI installer)")
     s.add_argument("--keep-trace", action="store_true"); s.add_argument("--no-sync", action="store_true"); s.set_defaults(f=cmd_install)
     s = sp.add_parser("sync", help="bridge the prefix's plugins to Linux DAWs with yabridge")
-    s.add_argument("dirs", nargs="*", help="extra plugin directories"); s.add_argument("--daw-env", action="store_true", help="make DAWs use the app's wine for this prefix (~/.local/bin/wine shim)")
+    s.add_argument("dirs", nargs="*", help="extra plugin directories")
     s.set_defaults(f=cmd_sync)
     sp.add_parser("programs", help="list Windows programs installed in the prefix").set_defaults(f=cmd_programs)
     s = sp.add_parser("run", help="start an installed program (name or part of it)")

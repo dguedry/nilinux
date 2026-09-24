@@ -78,7 +78,7 @@ class Window(Adw.ApplicationWindow):
         tv = Adw.ToolbarView(); self.toasts.set_child(tv)
         self.stack = Adw.ViewStack()
         header = Adw.HeaderBar(); switcher = Adw.ViewSwitcherTitle(stack=self.stack, title=TITLE); header.set_title_widget(switcher)
-        menu = Gio.Menu(); menu.append("Re-run setup / repair", "app.setup"); menu.append("Make DAWs use this wine", "app.dawenv"); menu.append("About", "app.about")
+        menu = Gio.Menu(); menu.append("Re-run setup / repair", "app.setup"); menu.append("About", "app.about")
         header.pack_end(Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu))
         tv.add_top_bar(header); tv.set_content(self.stack)
         self.stack.add_titled_with_icon(self.build_plugins(), "plugins", "Plugins", "audio-x-generic-symbolic")
@@ -191,9 +191,9 @@ class Window(Adw.ApplicationWindow):
         if not self.is_ready(): return
         def work():
             prods = products.installed(self.prefix); bridged = yabridge.bridged(self.prefix)
-            daw_state, daw_detail = yabridge.daw_environment_status(self.prefix)
+            daw_state, daw_detail = yabridge.plugin_wine_status(self.prefix)
             def show():
-                if daw_state == "missing": self.daw_banner.set_title("DAWs would run plugins with the host's wine and damage the prefix — run Re-run setup / repair. Plugins are not bridged until then.")
+                if daw_state == "missing": self.daw_banner.set_title("Plugins are not bridged: a DAW would run them with the host's wine and damage the prefix — run Re-run setup / repair.")
                 self.daw_banner.set_revealed(daw_state != "active")
                 rows = []
                 for p in prods:
@@ -444,7 +444,7 @@ class Window(Adw.ApplicationWindow):
 class App(Adw.Application):
     def __init__(self):
         super().__init__(application_id=APP_ID)
-        for name, cb in (("setup", lambda *_: self.win.run_setup()), ("dawenv", lambda *_: self.win.run_bg("DAW environment", lambda r: yabridge.configure_daw_environment(self.win.prefix, r))), ("about", self.about)):
+        for name, cb in (("setup", lambda *_: self.win.run_setup()), ("about", self.about)):
             act = Gio.SimpleAction(name=name); act.connect("activate", cb); self.add_action(act)
         # Ctrl+1..5 switch tabs (keyboard access to the view switcher)
         for i, page in enumerate(("plugins", "programs", "install", "health"), start=1):
