@@ -52,7 +52,7 @@ WINE_NEEDS_MASTER = (9, 22)
 
 def build_marker() -> dict | None:
     """Metadata of a nilinux-built yabridge, or None for an upstream release."""
-    try: return json.loads(MARKER.read_text()) if MARKER.exists() else None
+    try: return json.loads(MARKER.read_text(errors="replace")) if MARKER.exists() else None
     except (OSError, ValueError): return None
 
 def pinned_wine_version() -> str:
@@ -318,7 +318,9 @@ def shim_is_ours(p: Prefix) -> bool:
     f = WINE_SHIM
     try:
         if f.is_symlink(): return f.resolve() == p.build.wine.resolve()
-        return f.is_file() and SHIM_MARK in f.read_text() and str(p.build.wine) in f.read_text()
+        if not f.is_file(): return False
+        txt = f.read_text(errors="replace")
+        return SHIM_MARK in txt and str(p.build.wine) in txt
     except OSError: return False
 
 def configure_daw_environment(p: Prefix, reporter=None) -> bool:
@@ -333,17 +335,17 @@ def configure_daw_environment(p: Prefix, reporter=None) -> bool:
     changed = False
     shim = WINE_SHIM
     if (shim.exists() or shim.is_symlink()) and not shim_is_ours(p):
-        try: cur = shim.read_text()
+        try: cur = shim.read_text(errors="replace")
         except OSError: cur = ""
         if SHIM_MARK not in cur:
             r.fail(f"{shim} exists and is not this app's — remove it, or point it at {p.build.wine}"); return False
-    if not shim_is_ours(p) or shim.read_text() != shim_content(p):
+    if not shim_is_ours(p) or shim.read_text(errors="replace") != shim_content(p):
         shim.parent.mkdir(parents=True, exist_ok=True)
         if shim.is_symlink(): shim.unlink()
         shim.write_text(shim_content(p)); shim.chmod(0o755); changed = True
     f = daw_environment_file()
     try:
-        if f.is_file() and f.read_text() == legacy_daw_environment_content(p):
+        if f.is_file() and f.read_text(errors="replace") == legacy_daw_environment_content(p):
             f.unlink(); changed = True
     except OSError: pass
     (r.ok if changed else r.skip)(f"{shim} routes {p.path.name} -> {p.build.wine.name}; other prefixes keep their wine" if changed else "configured")

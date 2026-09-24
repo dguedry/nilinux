@@ -49,7 +49,7 @@ MimeType=x-scheme-handler/native-access;
 """
 
 def _ours(path: Path) -> bool:
-    try: return MARK in path.read_text()
+    try: return MARK in path.read_text(errors="replace")
     except OSError: return False
 
 def status(p: Prefix | None = None) -> dict:
@@ -78,10 +78,10 @@ def register(p: Prefix, reporter=None) -> bool:
         SCRIPT.parent.mkdir(parents=True, exist_ok=True)
         APPS.mkdir(parents=True, exist_ok=True)
         want = script_content(p)
-        if not SCRIPT.exists() or SCRIPT.read_text() != want:
+        if not SCRIPT.exists() or SCRIPT.read_text(errors="replace") != want:
             SCRIPT.write_text(want)
         SCRIPT.chmod(0o755)
-        if not DESKTOP.exists() or DESKTOP.read_text() != DESKTOP_CONTENT:
+        if not DESKTOP.exists() or DESKTOP.read_text(errors="replace") != DESKTOP_CONTENT:
             DESKTOP.write_text(DESKTOP_CONTENT)
         if shutil.which("update-desktop-database"):
             subprocess.run(["update-desktop-database", str(APPS)], capture_output=True, timeout=30)

@@ -71,6 +71,16 @@ class WineShimTest(unittest.TestCase):
         self.assertFalse(yabridge.configure_daw_environment(self.prefix))
         self.assertIn("someone else", self.shim.read_text())
 
+    def test_binary_wine_on_path_is_foreign_not_a_crash(self):
+        """A real wine binary already at ~/.local/bin/wine (common on atomic
+        distros like Bazzite, where ~/.local/bin is shared with the Flatpak).
+        Reading it as UTF-8 raises UnicodeDecodeError -- a ValueError, which
+        `except OSError` does not catch -- and that aborted the whole install."""
+        self.shim.write_bytes(b"ELF\xff\xfe\x00binary wine, not text")
+        self.assertFalse(yabridge.shim_is_ours(self.prefix))
+        self.assertFalse(yabridge.configure_daw_environment(self.prefix))
+        self.assertTrue(self.shim.read_bytes().startswith(b"ELF\xff"), "must not be overwritten")
+
     def test_legacy_environment_d_removed(self):
         legacy = self.home / ".config/environment.d/50-nilinux.conf"
         legacy.parent.mkdir(parents=True)
