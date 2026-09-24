@@ -346,7 +346,7 @@ def legacy_daw_environment_content(p: Prefix) -> str:
     return f"WINELOADER={p.build.wine}\nWINEFSYNC=1\n"
 
 def remove_legacy_routing(p: Prefix, reporter=None) -> bool:
-    """Releases up to 0.1.27 routed DAWs from outside the prefix: a ~/.local/bin/wine
+    """Releases up to 0.1.28 routed DAWs from outside the prefix: a ~/.local/bin/wine
     shim (0.1.4+), before that the environment.d file. The prefix record replaces
     both. Remove them only when they are the app's, and the shim only once the
     record is in force, so nothing is ever left without a route."""

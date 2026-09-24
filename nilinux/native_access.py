@@ -549,7 +549,7 @@ def prepare(p: Prefix, reporter=None):
     from . import yabridge
     try: yabridge.install(r)      # so DAW bridging works from the first product install
     except Exception as e: r.step("Installing yabridge"); r.fail(str(e)[:80])
-    try: yabridge.remove_legacy_routing(p, r)   # the ~/.local/bin/wine shim of releases up to 0.1.27
+    try: yabridge.remove_legacy_routing(p, r)   # the ~/.local/bin/wine shim of releases up to 0.1.28
     except Exception as e: r.step("Removing the old wine routing"); r.fail(str(e)[:80])
     from . import urlhandler
     try: urlhandler.register(p, r)             # browser sign-in calls back to native-access://

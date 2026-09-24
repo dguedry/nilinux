@@ -100,7 +100,7 @@ it is started; bridged plugins are ordinary VST2/VST3/CLAP bundles under
 the record and the launcher are in place the app does not bridge plugins, and
 Health and the Plugins tab say so: a DAW using the host's own wine would run
 *its* prefix update on the app's prefix and replace the DLLs with another
-version's. (Releases up to 0.1.27 routed through a `~/.local/bin/wine` shim,
+version's. (Releases up to 0.1.28 routed through a `~/.local/bin/wine` shim,
 and before 0.1.4 through a session-wide `WINELOADER` in
 `~/.config/environment.d`; setup removes both when they are the app's.)
 - **Progress** — step list, download bar and log for long tasks.
