@@ -48,7 +48,7 @@ def summary(p: wine.Prefix | None = None) -> str:
     w(f"python        {platform.python_version()}\n")
     w(f"kernel        {platform.release()}\n")
     try:
-        osr = dict(l.split("=", 1) for l in Path("/etc/os-release").read_text().splitlines() if "=" in l)
+        osr = dict(l.split("=", 1) for l in Path("/etc/os-release").read_text(errors="replace").splitlines() if "=" in l)
         w(f"distribution  {osr.get('PRETTY_NAME', '?').strip('\"')}\n")
     except OSError: pass
     w(f"flatpak       {'yes' if host.in_flatpak() else 'no'}\n")

@@ -1,5 +1,5 @@
 """GTK4 / libadwaita front end. Thin: every action calls the package."""
-import subprocess, sys, threading
+import subprocess, sys, threading, traceback
 from pathlib import Path
 import gi
 gi.require_version("Gtk", "4.0"); gi.require_version("Adw", "1")
@@ -110,7 +110,12 @@ class Window(Adw.ApplicationWindow):
         def worker():
             err = None
             try: result = fn(self.task.reporter)
-            except Exception as e: err = e; result = None
+            except Exception as e:
+                err = e; result = None
+                # the message alone rarely names the file/line -- keep the traceback
+                # in the log so a user-reported failure is diagnosable (see report.py)
+                for line in traceback.format_exc().rstrip().splitlines():
+                    self.task.reporter.log(line)
             def finish():
                 self.busy = False
                 if err: self.task.reporter.step(f"Error: {err}"); self.task.reporter.fail()

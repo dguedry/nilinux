@@ -460,7 +460,10 @@ def disable_self_update(p: Prefix, reporter=None) -> str:
     r.step("Disabling Native Access self-updates")
     # undo earlier attempts (feed-URL hack; dev.json key)
     yml = na_dir(p) / "resources/app-update.yml"; orig = yml.with_suffix(".yml.orig")
-    if orig.exists() and UPDATER_DISABLED_URL in yml.read_text(): yml.write_text(orig.read_text())
+    try:
+        if orig.exists() and UPDATER_DISABLED_URL in yml.read_text(errors="replace"):
+            yml.write_text(orig.read_text(errors="replace"))
+    except OSError: pass
     dj = na_roaming(p) / "dev.json"
     if dj.exists():
         try:
@@ -546,7 +549,10 @@ def prepare(p: Prefix, reporter=None):
     from . import yabridge
     try: yabridge.install(r)      # so DAW bridging works from the first product install
     except Exception as e: r.step("Installing yabridge"); r.fail(str(e)[:80])
-    yabridge.configure_daw_environment(p, r)   # DAWs must run plugins with *this* wine (see yabridge.daw_environment_status)
+    # DAWs must run plugins with *this* wine (see yabridge.daw_environment_status).
+    # Never let a shim problem abort an otherwise good install: bridging is repairable later.
+    try: yabridge.configure_daw_environment(p, r)
+    except Exception as e: r.step("DAW environment"); r.fail(str(e)[:80])
     from . import urlhandler
     try: urlhandler.register(p, r)             # browser sign-in calls back to native-access://
     except Exception as e: r.step("native-access:// handler"); r.fail(str(e)[:80])
