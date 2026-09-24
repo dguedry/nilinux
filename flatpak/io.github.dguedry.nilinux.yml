@@ -31,7 +31,7 @@ finish-args:
   - --filesystem=~/.local/share/yabridge:create
   - --filesystem=~/.local/bin:create
   - --filesystem=~/.config/yabridgectl:create
-  - --filesystem=~/.config/environment.d:create   # "Make DAWs use this wine" (WINELOADER)
+  - --filesystem=~/.config/environment.d:create   # removes the session-wide WINELOADER releases before 0.1.4 wrote there
   # The prefix's wineserver is shared with host DAWs (below), and wineserver opens
   # every file on behalf of every client. So whatever a plugin can reach through
   # the prefix must be visible from inside this sandbox too: Wine links the

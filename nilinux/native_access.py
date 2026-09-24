@@ -541,7 +541,7 @@ def apply_pending_update(p: Prefix, reporter=None) -> bool:
 def prepare(p: Prefix, reporter=None):
     """Everything that does not need Native Access: prefix, fonts, C runtime, registry."""
     r = null_reporter(reporter)
-    p.create(r); p.refresh_builtins(r); fonts(p, r); vc_runtime(p, r); registry(p, r); download_location(p, r)
+    p.create(r); p.declare_wine(r); p.refresh_builtins(r); fonts(p, r); vc_runtime(p, r); registry(p, r); download_location(p, r)
     from . import dxvk
     try: dxvk.install(p, r)          # plugin GUIs that WineD3D draws wrong (skipped without a hardware Vulkan driver)
     except Exception as e: r.step("Installing DXVK"); r.fail(str(e)[:80])
@@ -549,10 +549,8 @@ def prepare(p: Prefix, reporter=None):
     from . import yabridge
     try: yabridge.install(r)      # so DAW bridging works from the first product install
     except Exception as e: r.step("Installing yabridge"); r.fail(str(e)[:80])
-    # DAWs must run plugins with *this* wine (see yabridge.daw_environment_status).
-    # Never let a shim problem abort an otherwise good install: bridging is repairable later.
-    try: yabridge.configure_daw_environment(p, r)
-    except Exception as e: r.step("DAW environment"); r.fail(str(e)[:80])
+    try: yabridge.remove_legacy_routing(p, r)   # the ~/.local/bin/wine shim of releases up to 0.1.27
+    except Exception as e: r.step("Removing the old wine routing"); r.fail(str(e)[:80])
     from . import urlhandler
     try: urlhandler.register(p, r)             # browser sign-in calls back to native-access://
     except Exception as e: r.step("native-access:// handler"); r.fail(str(e)[:80])
