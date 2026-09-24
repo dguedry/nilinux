@@ -52,6 +52,11 @@
     <control>keyboard</control>
   </supports>
   <releases>
+    <release version="0.1.29" date="2026-09-24">
+      <description>
+        <p>The shim shipped through 0.1.28, not 0.1.27</p>
+      </description>
+    </release>
     <release version="0.1.28" date="2026-09-18">
       <description>
         <p>Bridge new plugins while Native Access is still open</p>
